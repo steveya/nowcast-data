@@ -196,7 +196,13 @@ class FREDALFREDAdapter(PITAdapter):
         raise SourceFetchError("FRED_ALFRED", "Max retries exceeded")
     
     def _infer_frequency(self, date_str: str) -> str:
-        """Infer frequency from date string format."""
-        # Simple heuristic - FRED typically uses period end dates
-        # Real implementation should query series metadata
-        return "M"  # Default to monthly
+        """
+        Infer frequency from date string format.
+        
+        TODO: This is a placeholder implementation that returns 'M' (monthly).
+        For production use, should query FRED's series metadata API to get
+        the actual frequency, or parse the date pattern to infer it.
+        
+        FRED frequencies: D (daily), W (weekly), M (monthly), Q (quarterly), A (annual)
+        """
+        return "M"  # Default to monthly - should be improved

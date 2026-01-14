@@ -76,6 +76,10 @@ def validate_no_lookahead(
     """
     Validate that vintage_date does not create lookahead bias.
     
+    Note: Timezone-aware timestamps are normalized to timezone-naive before
+    comparison (timezone info is removed). This ensures consistent comparison
+    across different timestamp types.
+    
     Args:
         vintage_date: The vintage date used
         asof_date: The as-of evaluation date

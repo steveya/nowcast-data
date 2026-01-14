@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Steve Ya", email = "steveya@example.com"}
+    {name = "Steve Ya"}
 ]
 keywords = ["macroeconomics", "point-in-time", "vintage", "data", "quant"]
 classifiers = [
