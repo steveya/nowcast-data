@@ -1,0 +1,138 @@
+# G6 Macro Series Catalog
+# Point-in-time (PIT) configuration for major macroeconomic indicators
+
+# United States
+US_GDP_SAAR:
+  country: US
+  source: FRED_ALFRED
+  source_series_id: GDP
+  frequency: Q
+  seasonal_adjustment: SAAR
+  units: Billions of Dollars
+  description: Gross Domestic Product (Seasonally Adjusted Annual Rate)
+  pit_mode: ALFRED_REALTIME
+
+US_CPI:
+  country: US
+  source: FRED_ALFRED
+  source_series_id: CPIAUCSL
+  frequency: M
+  seasonal_adjustment: SA
+  units: Index 1982-1984=100
+  description: Consumer Price Index for All Urban Consumers - All Items
+  pit_mode: ALFRED_REALTIME
+
+US_UNRATE:
+  country: US
+  source: FRED_ALFRED
+  source_series_id: UNRATE
+  frequency: M
+  seasonal_adjustment: SA
+  units: Percent
+  description: Unemployment Rate
+  pit_mode: ALFRED_REALTIME
+
+US_FEDFUNDS:
+  country: US
+  source: FRED_ALFRED
+  source_series_id: FEDFUNDS
+  frequency: M
+  seasonal_adjustment: NSA
+  units: Percent
+  description: Federal Funds Effective Rate
+  pit_mode: ALFRED_REALTIME
+
+# Euro Area
+EA_GDP:
+  country: EA
+  source: ECB_RTDB
+  source_series_id: MNA.Q.Y.I8.W2.S1.S1.B.B1GQ._Z._Z._Z.EUR.V.N
+  frequency: Q
+  seasonal_adjustment: SA
+  units: Million EUR
+  description: Gross Domestic Product at market prices
+  pit_mode: DISCRETE_VINTAGES_SNAP
+
+EA_HICP:
+  country: EA
+  source: ECB_RTDB
+  source_series_id: ICP.M.U2.N.000000.4.ANR
+  frequency: M
+  seasonal_adjustment: NSA
+  units: Index 2015=100
+  description: Harmonised Index of Consumer Prices - All Items
+  pit_mode: DISCRETE_VINTAGES_SNAP
+
+# United Kingdom
+UK_GDP:
+  country: UK
+  source: BOE_RTDB
+  source_series_id: ABMI
+  frequency: Q
+  seasonal_adjustment: SA
+  units: Million GBP
+  description: Gross Domestic Product at market prices
+  pit_mode: DISCRETE_VINTAGES_SNAP
+
+UK_CPI:
+  country: UK
+  source: BOE_RTDB
+  source_series_id: D7BT
+  frequency: M
+  seasonal_adjustment: NSA
+  units: Index 2015=100
+  description: Consumer Prices Index - All Items
+  pit_mode: NO_PIT
+
+# Canada
+CA_GDP:
+  country: CA
+  source: STATCAN_REALTIME
+  source_series_id: v65201210
+  frequency: Q
+  seasonal_adjustment: SAAR
+  units: Million CAD
+  description: Gross Domestic Product at market prices
+  pit_mode: DISCRETE_VINTAGES_SNAP
+
+CA_CPI:
+  country: CA
+  source: STATCAN_REALTIME
+  source_series_id: v41690973
+  frequency: M
+  seasonal_adjustment: NSA
+  units: Index 2002=100
+  description: Consumer Price Index - All Items
+  pit_mode: DISCRETE_VINTAGES_SNAP
+
+# Switzerland
+CH_GDP:
+  country: CH
+  source: SWISS_SECO
+  source_series_id: GDP_CH
+  frequency: Q
+  seasonal_adjustment: SA
+  units: Million CHF
+  description: Gross Domestic Product
+  pit_mode: NO_PIT
+
+# Japan
+JP_GDP:
+  country: JP
+  source: FRED_ALFRED
+  source_series_id: JPNRGDPEXP
+  frequency: Q
+  seasonal_adjustment: SA
+  units: Billions of Yen
+  description: Real Gross Domestic Product for Japan
+  pit_mode: ALFRED_REALTIME
+
+JP_CPI:
+  country: JP
+  source: FRED_ALFRED
+  source_series_id: JPNCPIALLMINMEI
+  frequency: M
+  seasonal_adjustment: SA
+  units: Index 2015=100
+  description: Consumer Price Index - All Items for Japan
+  pit_mode: NO_PIT
