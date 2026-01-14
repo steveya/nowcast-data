@@ -2,7 +2,7 @@
 
 import yaml
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from nowcast_data.pit.core.models import SeriesMetadata, PITMode
 
 
@@ -55,7 +55,7 @@ class SeriesCatalog:
         """Add or update series metadata."""
         self._metadata[metadata.series_key] = metadata
     
-    def list_series(self, country: Optional[str] = None, source: Optional[str] = None) -> list[str]:
+    def list_series(self, country: Optional[str] = None, source: Optional[str] = None) -> List[str]:
         """
         List series keys, optionally filtered.
         

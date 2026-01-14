@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Optional, Literal, Dict, Any
+from typing import Optional, Literal, Dict, Any, List
 import pandas as pd
 
 
@@ -66,7 +66,7 @@ class PITObservation:
         }
 
 
-def create_pit_dataframe(observations: list[PITObservation]) -> pd.DataFrame:
+def create_pit_dataframe(observations: List[PITObservation]) -> pd.DataFrame:
     """
     Create a canonical PIT DataFrame from observations.
     
