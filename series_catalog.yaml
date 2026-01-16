@@ -5,6 +5,7 @@
 US_GDP_SAAR:
   country: US
   source: FRED_ALFRED
+  adapter: alphaforge
   source_series_id: GDP
   frequency: Q
   seasonal_adjustment: SAAR

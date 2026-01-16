@@ -2,6 +2,7 @@
 
 from datetime import date
 from pathlib import Path
+import pandas as pd
 
 from nowcast_data.pit.core.catalog import SeriesCatalog
 from nowcast_data.pit.api import PITDataManager
@@ -128,5 +129,60 @@ def main():
     print("Demo complete!")
 
 
+def save_gdp_pit_demo(manager: PITDataManager):
+    """
+    This example demonstrates how to get point-in-time data for US GDP (US_GDP_SAAR)
+    and save it to a CSV file.
+    """
+    print("\n" + "="*50 + "\n")
+    print("Example 5: Save US GDP Point-in-Time data to CSV")
+    print("-" * 50)
+
+    # Create output directory
+    output_dir = Path(__file__).parent.parent / "outputs" / "gdp_pit_demo"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Saving output to {output_dir}")
+
+    series_key = "US_GDP_SAAR"
+
+    # 1. Get all vintage dates for the series
+    print(f"Fetching vintage dates for {series_key}...")
+    vintage_dates = manager.get_series_vintages(series_key)
+    print(f"Found {len(vintage_dates)} vintage dates.")
+
+    # For this example, we will use all vintages
+    print(f"Fetching data for all {len(vintage_dates)} vintages...")
+
+    all_series = []
+    import time
+    for vintage in vintage_dates:
+        df = manager.get_series_asof(series_key, vintage)
+        # The 'asof_date' column represents the vintage date
+        # The 'obs_date' column represents the reference period
+        df = df.set_index(["asof_date", "obs_date"])["value"]
+        df.index = df.index.set_levels(pd.to_datetime(df.index.levels[1]).to_period('Q'), level=1)
+        all_series.append(df)
+        time.sleep(0.1)
+
+    # Concatenate all series into a single multi-indexed series
+    result_series = pd.concat(all_series)
+
+    # Reshape the data to have vintages as columns
+    result_df = result_series.unstack(level=0)
+    
+    # Save to CSV
+    output_path = output_dir / "gdp_pit_demo.csv"
+    result_df.to_csv(output_path)
+    print(f"Successfully saved data to {output_path}")
+
+
 if __name__ == "__main__":
     main()
+    # Also run the new demo
+    catalog_path = Path(__file__).parent.parent / "series_catalog.yaml"
+    catalog = SeriesCatalog(catalog_path)
+    try:
+        manager = PITDataManager(catalog)
+        save_gdp_pit_demo(manager)
+    except ValueError as e:
+        print(f"Warning: {e}")

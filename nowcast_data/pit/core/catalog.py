@@ -40,6 +40,7 @@ class SeriesCatalog:
                 units=series_config.get('units'),
                 description=series_config.get('description'),
                 transforms=series_config.get('transforms'),
+                adapter=series_config.get('adapter'),
             )
             self._metadata[series_key] = metadata
     

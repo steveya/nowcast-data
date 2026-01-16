@@ -23,6 +23,7 @@ class SeriesMetadata:
     units: Optional[str] = None
     description: Optional[str] = None
     transforms: Optional[list] = None
+    adapter: Optional[str] = None
 
 
 @dataclass

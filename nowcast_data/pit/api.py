@@ -1,8 +1,10 @@
 """Main PIT data retrieval API facade."""
 
+import os
 from datetime import date
 from typing import Optional, List, Dict
 import pandas as pd
+from dotenv import load_dotenv
 
 from nowcast_data.pit.adapters.base import PITAdapter
 from nowcast_data.pit.adapters.fred import FREDALFREDAdapter
@@ -10,9 +12,12 @@ from nowcast_data.pit.adapters.ecb import ECBRTDBAdapter
 from nowcast_data.pit.adapters.boe import BOERTDBAdapter
 from nowcast_data.pit.adapters.statcan import StatCanRealTimeAdapter
 from nowcast_data.pit.adapters.swiss import SwissAdapter
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 from nowcast_data.pit.core.catalog import SeriesCatalog
 from nowcast_data.pit.core.models import create_pit_dataframe, create_wide_view
 from nowcast_data.pit.exceptions import PITNotSupportedError
+
+load_dotenv()
 
 
 class PITDataManager:
@@ -38,7 +43,12 @@ class PITDataManager:
             self.adapters = {}
             # FRED is the only one requiring API key, others are stubs
             try:
-                self.adapters["FRED_ALFRED"] = FREDALFREDAdapter()
+                fred_api_key = os.environ.get("FRED_API_KEY")
+                if fred_api_key:
+                    self.adapters["FRED_ALFRED"] = FREDALFREDAdapter(api_key=fred_api_key)
+                    self.adapters["alphaforge"] = AlphaForgePITAdapter(fred_api_key=fred_api_key)
+                else:
+                    print("Warning: FRED_API_KEY environment variable not set. FRED and AlphaForge adapters will not be available.")
             except ValueError:
                 # API key not available, skip FRED
                 pass
@@ -84,9 +94,10 @@ class PITDataManager:
             raise PITNotSupportedError(series_key)
         
         # Get appropriate adapter
-        adapter = self.adapters.get(metadata.source)
+        adapter_name = getattr(metadata, 'adapter', metadata.source)
+        adapter = self.adapters.get(adapter_name)
         if not adapter:
-            raise ValueError(f"No adapter available for source '{metadata.source}'")
+            raise ValueError(f"No adapter available for source '{adapter_name}'")
         
         # Fetch data
         observations = adapter.fetch_asof(
