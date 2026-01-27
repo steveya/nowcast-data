@@ -134,6 +134,24 @@ cube = manager.build_pit_cube(
 )
 ```
 
+### 7. Benchmark PIT Builder
+
+Use the benchmark PIT builder to generate point-in-time panels compatible with the
+nowcasting benchmark layout. Outputs are written under benchmark_pit/:
+
+- benchmark_pit/vintages.parquet (list of as-of dates)
+- benchmark_pit/data_raw.parquet (MultiIndex: asof_date, obs_date)
+- benchmark_pit/data_tf.parquet (transformed values)
+
+Example:
+
+```bash
+python scripts/build_benchmark_pit.py \
+   --meta-path data/meta_data.csv \
+   --store-root ./pit_store \
+   --out-dir ./benchmark_pit
+```
+
 ## Architecture
 
 ### Core Components
