@@ -74,6 +74,7 @@ class AlphaForgePITAdapter(PITAdapter):
         end: Optional[date] = None,
         *,
         metadata: Optional[SeriesMetadata] = None,
+        ingest_from_ctx_source: bool = True,
     ) -> List[PITObservation]:
         """
         Fetch observations as they were known on asof_date.
@@ -96,7 +97,7 @@ class AlphaForgePITAdapter(PITAdapter):
         start_ts = pd.Timestamp(start, tz="UTC") if start else None
         end_ts = pd.Timestamp(end, tz="UTC") if end else None
 
-        if "fred" in self._ctx.sources:
+        if ingest_from_ctx_source and "fred" in self._ctx.sources:
             query = Query(
                 table="fred_series",
                 columns=["value"],

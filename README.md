@@ -91,6 +91,10 @@ adapter.fetch_asof_ref("GDP", date(2025, 5, 15), start_ref="2024Q4", end_ref="20
 adapter.fetch_revisions_ref("GDP", "2024Q4", freq=RefFreq.Q)
 ```
 
+AlphaForge’s adapter can optionally ingest from `ctx.sources["fred"]` during
+`fetch_asof` (default `True`) before querying the PIT table. Set
+`ingest_from_ctx_source=False` to disable the source fetch side-effect.
+
 ### 4. Panel Data
 
 ```python

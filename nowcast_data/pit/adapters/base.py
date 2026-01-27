@@ -5,7 +5,8 @@ from datetime import date
 from typing import Optional, List
 import pandas as pd
 
-from nowcast_data.pit.core.models import PITObservation
+from alphaforge.time.ref_period import RefPeriod, RefFreq
+from nowcast_data.pit.core.models import PITObservation, SeriesMetadata
 
 
 class PITAdapter(ABC):
@@ -55,7 +56,7 @@ class PITAdapter(ABC):
         start: Optional[date] = None,
         end: Optional[date] = None,
         *,
-        metadata: Optional[object] = None,
+        metadata: Optional[SeriesMetadata] = None,
     ) -> List[PITObservation]:
         """
         Fetch observations as they were known on asof_date.
@@ -75,6 +76,32 @@ class PITAdapter(ABC):
             SourceFetchError: If fetching fails
         """
         pass
+
+    def fetch_asof_ref(
+        self,
+        series_id: str,
+        asof_date: date,
+        start_ref: str | RefPeriod | None = None,
+        end_ref: str | RefPeriod | None = None,
+        *,
+        freq: Optional[RefFreq] = None,
+        metadata: Optional[SeriesMetadata] = None,
+    ) -> List[PITObservation]:
+        """Optional ref-period snapshot query."""
+        raise NotImplementedError("Ref-period snapshot queries not supported.")
+
+    def fetch_revisions_ref(
+        self,
+        series_id: str,
+        ref: str | RefPeriod,
+        start_asof: Optional[date] = None,
+        end_asof: Optional[date] = None,
+        *,
+        freq: Optional[RefFreq] = None,
+        metadata: Optional[SeriesMetadata] = None,
+    ) -> pd.Series:
+        """Optional ref-period revision timeline query."""
+        raise NotImplementedError("Ref-period revision queries not supported.")
     
     def fetch_vintage(
         self,

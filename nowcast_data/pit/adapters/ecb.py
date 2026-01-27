@@ -4,7 +4,7 @@ from datetime import date
 from typing import Optional, List
 
 from nowcast_data.pit.adapters.base import PITAdapter
-from nowcast_data.pit.core.models import PITObservation
+from nowcast_data.pit.core.models import PITObservation, SeriesMetadata
 from nowcast_data.pit.exceptions import PITNotSupportedError
 
 
@@ -48,7 +48,7 @@ class ECBRTDBAdapter(PITAdapter):
         start: Optional[date] = None,
         end: Optional[date] = None,
         *,
-        metadata: Optional[object] = None,
+        metadata: Optional[SeriesMetadata] = None,
     ) -> List[PITObservation]:
         """
         Fetch observations as of asof_date.
