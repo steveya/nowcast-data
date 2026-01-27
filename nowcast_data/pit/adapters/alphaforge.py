@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
 
 import pandas as pd
@@ -13,6 +13,27 @@ from alphaforge.time.ref_period import RefPeriod, RefFreq
 from nowcast_data.pit.adapters.base import PITAdapter
 from nowcast_data.pit.adapters.alphaforge_layer import AlphaForgePITLayer
 from nowcast_data.pit.core.models import PITObservation, SeriesMetadata
+
+
+def _normalize_obs_date_key(value) -> date:
+    """Normalize AlphaForge obs_date timestamps to canonical date keys.
+
+    AlphaForge may return obs_date timestamps with non-midnight UTC times.
+    We round by adding 12 hours before taking the date to recover period-end keys.
+    """
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+
+    ts = pd.Timestamp(value)
+    if pd.isna(ts):
+        raise ValueError("obs_date is missing or NaT")
+    if ts.tz is None:
+        ts = ts.tz_localize("UTC")
+    else:
+        ts = ts.tz_convert("UTC")
+    if ts != ts.normalize():
+        ts = ts + pd.Timedelta(hours=12)
+    return ts.normalize().date()
 
 
 class AlphaForgePITAdapter(PITAdapter):
@@ -30,10 +51,10 @@ class AlphaForgePITAdapter(PITAdapter):
     def supports_pit(self, series_id: str) -> bool:
         """
         Check if a series supports point-in-time retrieval.
-        
+
         Args:
             series_id: Source-specific series identifier
-            
+
         Returns:
             True if PIT is supported, False otherwise
         """
@@ -43,13 +64,13 @@ class AlphaForgePITAdapter(PITAdapter):
     def list_vintages(self, query_series_key: str) -> List[date]:
         """
         List available vintage dates for a series.
-        
+
         Args:
             query_series_key: PIT series key stored in pit_observations
-            
+
         Returns:
             List of vintage dates (sorted)
-            
+
         Raises:
             PITNotSupportedError: If series doesn't support vintages
             SourceFetchError: If fetching fails
@@ -78,16 +99,16 @@ class AlphaForgePITAdapter(PITAdapter):
     ) -> List[PITObservation]:
         """
         Fetch observations as they were known on asof_date.
-        
+
         Args:
             series_id: Source-specific series identifier
             asof_date: Point-in-time evaluation date
             start: Optional start date for observation period
             end: Optional end date for observation period
-            
+
         Returns:
             List of PIT observations
-            
+
         Raises:
             PITNotSupportedError: If series doesn't support PIT
             VintageNotFoundError: If no vintage available at asof_date
@@ -115,8 +136,7 @@ class AlphaForgePITAdapter(PITAdapter):
             missing = required - set(panel_df.columns)
             if missing:
                 raise ValueError(
-                    "Unexpected alphaforge panel schema; missing "
-                    f"{sorted(missing)}"
+                    "Unexpected alphaforge panel schema; missing " f"{sorted(missing)}"
                 )
 
             if metadata is None:
@@ -139,9 +159,7 @@ class AlphaForgePITAdapter(PITAdapter):
             )
             self._ctx.pit.upsert_pit_observations(pit_df)
 
-        snap = self._layer.snapshot(
-            query_series_key, asof=asof_ts, start=start_ts, end=end_ts
-        )
+        snap = self._layer.snapshot(query_series_key, asof=asof_ts, start=start_ts, end=end_ts)
 
         observations = []
         series_key = metadata.series_key if metadata else series_id
@@ -155,7 +173,7 @@ class AlphaForgePITAdapter(PITAdapter):
                 source_series_id=source_series_id,
                 asof_date=asof_date,
                 vintage_date=asof_date,
-                obs_date=pd.Timestamp(obs_date).date(),
+                obs_date=_normalize_obs_date_key(obs_date),
                 value=float(value),
                 frequency=frequency,
             )
@@ -189,7 +207,7 @@ class AlphaForgePITAdapter(PITAdapter):
                 source_series_id=source_series_id,
                 asof_date=asof_date,
                 vintage_date=asof_date,
-                obs_date=pd.Timestamp(obs_date).date(),
+                obs_date=_normalize_obs_date_key(obs_date),
                 value=float(value),
                 frequency=frequency,
             )
