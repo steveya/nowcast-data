@@ -13,33 +13,31 @@ from alphaforge.store.duckdb_parquet import DuckDBParquetStore
 def pit_context(tmp_path: Path) -> DataContext:
     store = DuckDBParquetStore(root=str(tmp_path))
     ctx = DataContext(sources={}, calendars={}, store=store)
+    base_rows = [
+        {
+            "obs_date": "2024-12-31",
+            "asof_utc": "2025-01-10",
+            "value": 1.0,
+        },
+        {
+            "obs_date": "2024-12-31",
+            "asof_utc": "2025-02-10",
+            "value": 1.1,
+        },
+        {
+            "obs_date": "2025-03-31",
+            "asof_utc": "2025-04-10",
+            "value": 2.0,
+        },
+        {
+            "obs_date": "2025-03-31",
+            "asof_utc": "2025-05-10",
+            "value": 2.1,
+        },
+    ]
     data = pd.DataFrame(
-        [
-            {
-                "series_key": "GDP",
-                "obs_date": "2024-12-31",
-                "asof_utc": "2025-01-10",
-                "value": 1.0,
-            },
-            {
-                "series_key": "GDP",
-                "obs_date": "2024-12-31",
-                "asof_utc": "2025-02-10",
-                "value": 1.1,
-            },
-            {
-                "series_key": "GDP",
-                "obs_date": "2025-03-31",
-                "asof_utc": "2025-04-10",
-                "value": 2.0,
-            },
-            {
-                "series_key": "GDP",
-                "obs_date": "2025-03-31",
-                "asof_utc": "2025-05-10",
-                "value": 2.1,
-            },
-        ]
+        [{"series_key": "GDP", **row} for row in base_rows]
+        + [{"series_key": "US_GDP_SAAR", **row} for row in base_rows]
     )
     ctx.pit.upsert_pit_observations(data)
     return ctx

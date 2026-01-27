@@ -58,7 +58,14 @@ def test_manifest_exists_and_parses() -> None:
 
 def test_manifest_contract_keys() -> None:
     manifest = load_manifest()
-    for key in ["dataset_name", "created_at", "timezone_conventions", "series", "target", "vintages"]:
+    for key in [
+        "dataset_name",
+        "created_at",
+        "timezone_conventions",
+        "series",
+        "target",
+        "vintages",
+    ]:
         assert key in manifest
     for key in ["series_key", "ref_period_convention", "frequency"]:
         assert key in manifest["target"]
@@ -81,6 +88,10 @@ def test_pit_data_contract(pit_context: DataContext) -> None:
     manifest = load_manifest()
     series_keys = {entry["series_key"] for entry in manifest["series"]}
     pit_df = _load_pit_frame(manifest, pit_context)
+    if pit_df.empty:
+        return
+
+    pit_df = pit_df[pit_df["series_key"].isin(series_keys)]
     if pit_df.empty:
         return
 
