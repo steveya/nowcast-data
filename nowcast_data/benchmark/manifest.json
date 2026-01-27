@@ -236,7 +236,7 @@
     "obs_date": "UTC"
   },
   "vintages": {
-    "count": 0,
+    "count": null,
     "max_asof_utc": null,
     "min_asof_utc": null
   }

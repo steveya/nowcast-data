@@ -137,7 +137,9 @@ cube = manager.build_pit_cube(
 ### 7. Benchmark PIT Builder
 
 Use the benchmark PIT builder to generate point-in-time panels compatible with the
-nowcasting benchmark layout. Outputs are written under benchmark_pit/:
+nowcasting benchmark layout. Outputs are written under benchmark_pit/. The benchmark
+manifest includes a `vintages` section that may contain placeholder `null` values
+until computed by the builder:
 
 - benchmark_pit/vintages.parquet (list of as-of dates)
 - benchmark_pit/data_raw.parquet (MultiIndex: asof_date, obs_date)
