@@ -25,9 +25,21 @@ def test_bridge_builder_no_leakage(pit_context) -> None:
         },
         {
             "series_key": "P1",
+            "obs_date": "2025-05-31",
+            "asof_utc": "2025-05-10",
+            "value": 101.0,
+        },
+        {
+            "series_key": "P1",
             "obs_date": "2025-04-30",
             "asof_utc": "2025-06-10",
             "value": 999.0,
+        },
+        {
+            "series_key": "P1",
+            "obs_date": "2025-05-31",
+            "asof_utc": "2025-06-10",
+            "value": 998.0,
         },
     ]
 
@@ -44,4 +56,4 @@ def test_bridge_builder_no_leakage(pit_context) -> None:
     )
 
     current_quarter = pd.Period("2025Q2", freq="Q")
-    assert dataset.loc[current_quarter, "P1"] == 100.0
+    assert dataset.loc[current_quarter, "P1"] == 101.0

@@ -9,6 +9,7 @@ import pandas as pd
 from sklearn.linear_model import RidgeCV
 
 from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
+from nowcast_data.pit.adapters.base import PITAdapter
 from nowcast_data.pit.api import PITDataManager
 from nowcast_data.pit.core.catalog import SeriesCatalog
 from nowcast_data.pit.core.models import SeriesMetadata
@@ -49,7 +50,7 @@ def _agg_series(series: pd.Series, method: str) -> float:
 
 
 def build_rt_quarterly_dataset(
-    adapter: AlphaForgePITAdapter,
+    adapter: PITAdapter,
     catalog: SeriesCatalog | None,
     *,
     target_series_key: str,
@@ -85,17 +86,19 @@ def build_rt_quarterly_dataset(
                 metadata_by_key[key] = meta
 
     raw_by_key: dict[str, pd.Series] = {}
+    nobs_current: dict[str, int] = {}
+    last_obs_date_current_quarter: dict[str, date | None] = {}
     for series_key in series_keys:
         meta = metadata_by_key.get(series_key)
         # Always query PIT snapshots by canonical series_key; metadata controls source ingest.
-        if isinstance(adapter, AlphaForgePITAdapter):
+        try:
             observations = adapter.fetch_asof(
                 series_key,
                 asof_date,
                 metadata=meta,
                 ingest_from_ctx_source=ingest_from_ctx_source,
             )
-        else:
+        except TypeError:
             observations = adapter.fetch_asof(series_key, asof_date, metadata=meta)
         if not observations:
             raw_by_key[series_key] = pd.Series(dtype="float64")
@@ -112,9 +115,11 @@ def build_rt_quarterly_dataset(
             and series_key in predictor_key_set
             and str(meta.frequency).lower() == "m"
         ):
-            obs_dates = data["obs_date"]
-            if getattr(obs_dates.dt, "tz", None) is not None:
-                obs_dates = obs_dates.dt.tz_localize(None)
+            obs_dates = pd.to_datetime(data["obs_date"], utc=True, errors="coerce").dt.tz_convert(None)
+            if obs_dates.isna().any():
+                raise ValueError(
+                    f"Monthly predictor series '{series_key}' has unparseable obs_date values."
+                )
             non_month_end = obs_dates.loc[~obs_dates.dt.is_month_end]
             if not non_month_end.empty:
                 sample = non_month_end.dt.strftime("%Y-%m-%d").unique()[:3].tolist()
@@ -150,11 +155,9 @@ def build_rt_quarterly_dataset(
 
     if quarter_index.empty:
         dataset = pd.DataFrame(columns=["y"], index=quarter_index)
-        return dataset, {}, {}
+        return dataset, nobs_current, last_obs_date_current_quarter
 
     predictor_frame = pd.DataFrame(index=quarter_index)
-    nobs_current: dict[str, int] = {}
-    last_obs_date_current_quarter: dict[str, date | None] = {}
     for series_key in predictor_series_keys:
         series = raw_by_key.get(series_key, pd.Series(dtype="float64"))
         if series.empty:
