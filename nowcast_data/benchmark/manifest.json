@@ -227,7 +227,7 @@
     }
   ],
   "target": {
-    "frequency": "Q",
+    "frequency": "q",
     "ref_period_convention": "quarter_end",
     "series_key": "gdpc1"
   },

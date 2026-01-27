@@ -35,6 +35,8 @@ def _load_pit_frame(manifest: dict, pit_context: DataContext) -> pd.DataFrame:
             long_df = df.melt(id_vars=id_vars, var_name="series_key", value_name="value")
             return long_df[["series_key", "obs_date", "asof_utc"]]
 
+    if pit_context.pit is None:
+        raise ValueError("pit_context missing PIT store for manifest contract tests")
     return pit_context.pit.conn.execute(
         "SELECT series_key, obs_date, asof_utc FROM pit_observations"
     ).df()
@@ -52,6 +54,8 @@ def test_manifest_contract_keys() -> None:
         assert key in manifest
     for key in ["series_key", "ref_period_convention", "frequency"]:
         assert key in manifest["target"]
+    series_keys = {entry["series_key"] for entry in manifest["series"]}
+    assert manifest["target"]["series_key"] in series_keys
 
 
 def test_manifest_series_unique() -> None:
@@ -72,6 +76,8 @@ def test_pit_data_contract(pit_context: DataContext) -> None:
 
     obs_dates = pd.to_datetime(pit_df["obs_date"], utc=True, errors="coerce")
     assert obs_dates.notna().all()
+    assert obs_dates.dt.tz is not None
+    assert str(obs_dates.dt.tz) == "UTC"
 
     asof_dates = pd.to_datetime(pit_df["asof_utc"], utc=True, errors="coerce")
     assert asof_dates.notna().all()
