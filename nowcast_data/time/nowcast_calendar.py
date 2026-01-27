@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import re
 from typing import Optional
 
 try:  # pragma: no cover - optional dependency
@@ -48,30 +49,30 @@ def infer_previous_quarter(asof_date: date) -> "RefPeriod | _FallbackRefPeriod":
     return _make_ref_period(year, quarter)
 
 
-def refperiod_to_quarter_end(ref: "RefPeriod | _FallbackRefPeriod") -> date:
+def refperiod_to_quarter_end(ref: "RefPeriod | _FallbackRefPeriod | str") -> date:
     """Convert a ref period to its quarter-end date."""
     ref_str = str(ref)
-    if "Q" not in ref_str:
-        raise ValueError(f"Expected quarterly RefPeriod, got {ref_str}")
-    year_str, quarter_str = ref_str.split("Q", 1)
-    year = int(year_str)
-    quarter = int(quarter_str)
+    match = re.match(r"^(\d{4})Q(\d+)$", ref_str)
+    if not match:
+        raise ValueError(f"Expected quarterly RefPeriod in format YYYYQN, got {ref_str}")
+    year = int(match.group(1))
+    quarter = int(match.group(2))
+    if quarter not in {1, 2, 3, 4}:
+        raise ValueError(f"Invalid quarter: {quarter}. Must be 1, 2, 3, or 4")
     if quarter == 1:
         return date(year, 3, 31)
     if quarter == 2:
         return date(year, 6, 30)
     if quarter == 3:
         return date(year, 9, 30)
-    if quarter == 4:
-        return date(year, 12, 31)
-    raise ValueError(f"Invalid quarter in RefPeriod: {ref_str}")
+    return date(year, 12, 31)
 
 
 def get_target_asof_ref(
     adapter: PITAdapter,
     series_id_or_key: str,
     asof_date: date,
-    ref: "RefPeriod | _FallbackRefPeriod",
+    ref: "RefPeriod | _FallbackRefPeriod | str",
     freq: Optional["RefFreq"] = None,
     *,
     metadata=None,
@@ -96,7 +97,7 @@ def get_target_asof_ref(
     """
     if freq is None and RefFreq is not None:
         freq = RefFreq.Q
-    if adapter.fetch_asof_ref is PITAdapter.fetch_asof_ref:
+    if type(adapter).fetch_asof_ref is PITAdapter.fetch_asof_ref:
         adapter_name = getattr(adapter, "name", adapter.__class__.__name__)
         raise NotImplementedError(
             f"Adapter '{adapter_name}' does not support ref-period snapshots"
