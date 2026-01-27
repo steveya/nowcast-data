@@ -76,11 +76,31 @@ def get_target_asof_ref(
     *,
     metadata=None,
 ) -> float | None:
-    """Retrieve the target value for a ref period as-of a vintage."""
+    """
+    Retrieve the target value for a ref period as-of a vintage.
+
+    Args:
+        adapter: PIT adapter instance used for ref-period snapshots.
+        series_id_or_key: Series identifier or canonical series key.
+        asof_date: Point-in-time evaluation date.
+        ref: Reference period to fetch (quarterly).
+        freq: Optional RefFreq override (defaults to quarterly when available).
+        metadata: Optional series metadata passed through to the adapter.
+
+    Returns:
+        The target value for the ref period at the given vintage, or None if missing.
+
+    Raises:
+        NotImplementedError: If the adapter does not support ref-period snapshots.
+        ValueError: If multiple observations are returned for a single ref period.
+    """
     if freq is None and RefFreq is not None:
         freq = RefFreq.Q
     if adapter.fetch_asof_ref is PITAdapter.fetch_asof_ref:
-        raise NotImplementedError("Adapter does not support ref-period snapshots")
+        adapter_name = getattr(adapter, "name", adapter.__class__.__name__)
+        raise NotImplementedError(
+            f"Adapter '{adapter_name}' does not support ref-period snapshots"
+        )
     observations = adapter.fetch_asof_ref(
         series_id_or_key,
         asof_date,
@@ -92,5 +112,7 @@ def get_target_asof_ref(
     if not observations:
         return None
     if len(observations) > 1:
-        raise ValueError("Expected single observation for ref period")
+        raise ValueError(
+            f"Expected single observation for ref period, got {len(observations)}"
+        )
     return observations[0].value
