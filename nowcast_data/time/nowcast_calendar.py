@@ -54,27 +54,25 @@ def refperiod_to_quarter_end(ref: "RefPeriod | _FallbackRefPeriod | str") -> dat
     ref_str = str(ref)
     match = re.match(r"^(\d{4})Q(\d+)$", ref_str)
     if not match:
-        raise ValueError("Expected quarterly RefPeriod")
+        raise ValueError(f"Expected quarterly RefPeriod in format YYYYQN, got {ref_str}")
     year = int(match.group(1))
     quarter = int(match.group(2))
     if quarter not in {1, 2, 3, 4}:
-        raise ValueError("Invalid quarter")
+        raise ValueError(f"Invalid quarter: {quarter}. Must be 1, 2, 3, or 4")
     if quarter == 1:
         return date(year, 3, 31)
     if quarter == 2:
         return date(year, 6, 30)
     if quarter == 3:
         return date(year, 9, 30)
-    if quarter == 4:
-        return date(year, 12, 31)
-    raise ValueError(f"Invalid quarter in RefPeriod: {ref_str}")
+    return date(year, 12, 31)
 
 
 def get_target_asof_ref(
     adapter: PITAdapter,
     series_id_or_key: str,
     asof_date: date,
-    ref: "RefPeriod | _FallbackRefPeriod",
+    ref: "RefPeriod | _FallbackRefPeriod | str",
     freq: Optional["RefFreq"] = None,
     *,
     metadata=None,

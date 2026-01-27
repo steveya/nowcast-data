@@ -53,7 +53,10 @@ def test_refperiod_to_quarter_end() -> None:
 
 
 def test_refperiod_to_quarter_end_accepts_string() -> None:
+    assert refperiod_to_quarter_end("2025Q1") == date(2025, 3, 31)
     assert refperiod_to_quarter_end("2025Q2") == date(2025, 6, 30)
+    assert refperiod_to_quarter_end("2025Q3") == date(2025, 9, 30)
+    assert refperiod_to_quarter_end("2025Q4") == date(2025, 12, 31)
 
 
 @pytest.mark.skipif(not HAS_ALPHAFORGE, reason="alphaforge not installed")
@@ -132,10 +135,10 @@ def test_get_target_asof_ref_multiple_observations_raises(pit_context, monkeypat
 
 
 def test_refperiod_to_quarter_end_rejects_invalid() -> None:
-    with pytest.raises(ValueError, match="Expected quarterly"):
-        refperiod_to_quarter_end("2025M01")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="Expected quarterly RefPeriod"):
+        refperiod_to_quarter_end("2025M01")
     with pytest.raises(ValueError, match="Invalid quarter"):
-        refperiod_to_quarter_end("2025Q5")  # type: ignore[arg-type]
+        refperiod_to_quarter_end("2025Q5")
 
 
 def test_get_target_asof_ref_requires_adapter_override() -> None:
@@ -168,5 +171,5 @@ def test_get_target_asof_ref_requires_adapter_override() -> None:
             adapter,
             "GDP",
             asof_date=date(2025, 1, 1),
-            ref="2025Q1",  # type: ignore[arg-type]
+            ref="2025Q1",
         )
