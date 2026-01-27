@@ -54,7 +54,14 @@ Homepage = "https://github.com/steveya/nowcast-data"
 Repository = "https://github.com/steveya/nowcast-data"
 
 [tool.setuptools]
-packages = ["nowcast_data", "nowcast_data.pit", "nowcast_data.pit.adapters", "nowcast_data.pit.core", "nowcast_data.pit.storage"]
+packages = [
+    "nowcast_data",
+    "nowcast_data.pit",
+    "nowcast_data.pit.adapters",
+    "nowcast_data.pit.core",
+    "nowcast_data.pit.storage",
+    "nowcast_data.time",
+]
 
 [tool.black]
 line-length = 100
