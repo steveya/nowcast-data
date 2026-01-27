@@ -31,6 +31,7 @@ dependencies = [
     "python-dateutil>=2.8.0",
     "fredapi",
     "alphaforge @ git+https://github.com/steveya/alphaforge",
+    "duckdb>=0.9.0",
     "python-dotenv",
 ]
 
