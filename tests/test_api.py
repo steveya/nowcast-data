@@ -1,14 +1,22 @@
 from datetime import date
 from pathlib import Path
+
 from nowcast_data.pit.api import PITDataManager
 from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 from nowcast_data.pit.core.catalog import SeriesCatalog
 
 
-
-def test_get_series_asof_with_alphaforge_adapter(pit_context) -> None:
+def test_get_series_asof_with_alphaforge_adapter(pit_context, monkeypatch) -> None:
+    """Ensure manager passthrough uses PIT snapshot without ingestion side-effects."""
     catalog_path = Path(__file__).parent.parent / "series_catalog.yaml"
     catalog = SeriesCatalog(catalog_path)
+    mock_fred_source = object()
+    pit_context.sources["fred"] = mock_fred_source  # placeholder to exercise ingest toggle
+
+    def _fail_fetch_panel(*args, **kwargs):
+        raise AssertionError("fetch_panel should not be called when ingest is disabled")
+
+    monkeypatch.setattr(pit_context, "fetch_panel", _fail_fetch_panel)
     manager = PITDataManager(
         catalog=catalog,
         adapters={"alphaforge": AlphaForgePITAdapter(ctx=pit_context)},

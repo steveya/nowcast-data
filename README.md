@@ -93,7 +93,9 @@ adapter.fetch_revisions_ref("GDP", "2024Q4", freq=RefFreq.Q)
 
 AlphaForge’s adapter can optionally ingest from `ctx.sources["fred"]` during
 `fetch_asof` (default `True`) before querying the PIT table. Set
-`ingest_from_ctx_source=False` to disable the source fetch side-effect.
+`ingest_from_ctx_source=False` to disable the source fetch side-effect; this flag
+is also available on `PITDataManager.get_series_asof` when using the AlphaForge
+adapter.
 
 ### 4. Panel Data
 
