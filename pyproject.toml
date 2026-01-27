@@ -30,7 +30,7 @@ dependencies = [
     "requests>=2.31.0",
     "python-dateutil>=2.8.0",
     "fredapi",
-    "alphaforge",
+    "alphaforge @ git+https://github.com/steveya/alphaforge",
     "python-dotenv",
 ]
 
@@ -41,6 +41,7 @@ dev = [
     "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.0.0",
+    "duckdb>=0.9.0",
 ]
 storage = [
     "pyarrow>=12.0.0",

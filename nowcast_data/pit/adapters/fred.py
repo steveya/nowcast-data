@@ -103,7 +103,9 @@ class FREDALFREDAdapter(PITAdapter):
         series_id: str,
         asof_date: date,
         start: Optional[date] = None,
-        end: Optional[date] = None
+        end: Optional[date] = None,
+        *,
+        metadata: Optional[object] = None,
     ) -> List[PITObservation]:
         """
         Fetch observations as of asof_date using FRED realtime API.

@@ -13,6 +13,9 @@ from nowcast_data.pit.adapters.boe import BOERTDBAdapter
 from nowcast_data.pit.adapters.statcan import StatCanRealTimeAdapter
 from nowcast_data.pit.adapters.swiss import SwissAdapter
 from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
+from alphaforge.data.context import DataContext
+from alphaforge.data.fred_source import FREDDataSource
+from alphaforge.store.duckdb_parquet import DuckDBParquetStore
 from nowcast_data.pit.core.catalog import SeriesCatalog
 from nowcast_data.pit.core.models import create_pit_dataframe, create_wide_view
 from nowcast_data.pit.exceptions import PITNotSupportedError
@@ -46,7 +49,14 @@ class PITDataManager:
                 fred_api_key = os.environ.get("FRED_API_KEY")
                 if fred_api_key:
                     self.adapters["FRED_ALFRED"] = FREDALFREDAdapter(api_key=fred_api_key)
-                    self.adapters["alphaforge"] = AlphaForgePITAdapter(fred_api_key=fred_api_key)
+                    store_root = os.environ.get("ALPHAFORGE_STORE_ROOT", ".alphaforge_store")
+                    store = DuckDBParquetStore(root=store_root)
+                    ctx = DataContext(
+                        sources={"fred": FREDDataSource(api_key=fred_api_key)},
+                        calendars={},
+                        store=store,
+                    )
+                    self.adapters["alphaforge"] = AlphaForgePITAdapter(ctx=ctx)
                 else:
                     print("Warning: FRED_API_KEY environment variable not set. FRED and AlphaForge adapters will not be available.")
             except ValueError:
@@ -104,7 +114,8 @@ class PITDataManager:
             metadata.source_series_id,
             asof_date,
             start,
-            end
+            end,
+            metadata=metadata,
         )
         
         # Convert to DataFrame
@@ -181,9 +192,10 @@ class PITDataManager:
         if metadata.pit_mode == "NO_PIT":
             raise PITNotSupportedError(series_key)
         
-        adapter = self.adapters.get(metadata.source)
+        adapter_name = metadata.adapter or metadata.source
+        adapter = self.adapters.get(adapter_name)
         if not adapter:
-            raise ValueError(f"No adapter available for source '{metadata.source}'")
+            raise ValueError(f"No adapter available for source '{adapter_name}'")
         
         return adapter.list_vintages(metadata.source_series_id)
     
