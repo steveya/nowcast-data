@@ -1,0 +1,243 @@
+{
+  "created_at": "2026-01-27T20:32:37Z",
+  "data_locations": {
+    "benchmark_data_raw": "benchmark_pit/data_raw.parquet",
+    "benchmark_data_tf": "benchmark_pit/data_tf.parquet",
+    "benchmark_output_root": "benchmark_pit",
+    "benchmark_vintages": "benchmark_pit/vintages.parquet",
+    "pit_store_root": "pit_store"
+  },
+  "dataset_name": "nowcast_benchmark_pit",
+  "series": [
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "payems",
+      "source": "fred",
+      "source_series_id": "PAYEMS",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "q",
+      "series_key": "gdpc1",
+      "source": "fred",
+      "source_series_id": "GDPC1",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "cpiaucsl",
+      "source": "fred",
+      "source_series_id": "CPIAUCSL",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "dgorder",
+      "source": "fred",
+      "source_series_id": "DGORDER",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "hsn1f",
+      "source": "fred",
+      "source_series_id": "HSN1F",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "rsafs",
+      "source": "fred",
+      "source_series_id": "RSAFS",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "unrate",
+      "source": "fred",
+      "source_series_id": "UNRATE",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "houst",
+      "source": "fred",
+      "source_series_id": "HOUST",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "indpro",
+      "source": "fred",
+      "source_series_id": "INDPRO",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "dspic96",
+      "source": "fred",
+      "source_series_id": "DSPIC96",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "boptexp",
+      "source": "fred",
+      "source_series_id": "BOPTEXP",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "boptimp",
+      "source": "fred",
+      "source_series_id": "BOPTIMP",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "whlslrimsa",
+      "source": "fred",
+      "source_series_id": "WHLSLRIMSA",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "ttlcons",
+      "source": "fred",
+      "source_series_id": "TTLCONS",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "ir",
+      "source": "fred",
+      "source_series_id": "IR",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "cpilfesl",
+      "source": "fred",
+      "source_series_id": "CPILFESL",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "pcepilfe",
+      "source": "fred",
+      "source_series_id": "PCEPILFE",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "pcepi",
+      "source": "fred",
+      "source_series_id": "PCEPI",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "permit",
+      "source": "fred",
+      "source_series_id": "PERMIT",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "tcu",
+      "source": "fred",
+      "source_series_id": "TCU",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "businv",
+      "source": "fred",
+      "source_series_id": "BUSINV",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "q",
+      "series_key": "ulcnfb",
+      "source": "fred",
+      "source_series_id": "ULCNFB",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "m",
+      "series_key": "iq",
+      "source": "fred",
+      "source_series_id": "IQ",
+      "transform": "pctchange"
+    },
+    {
+      "adapter": "alphaforge",
+      "aggregation_hint": null,
+      "freq": "q",
+      "series_key": "a261rx1q020sbea",
+      "source": "fred",
+      "source_series_id": "A261RX1Q020SBEA",
+      "transform": "pctchange"
+    }
+  ],
+  "target": {
+    "frequency": "q",
+    "ref_period_convention": "quarter_end",
+    "series_key": "gdpc1"
+  },
+  "timezone_conventions": {
+    "asof_utc": "UTC",
+    "obs_date": "UTC"
+  },
+  "vintages": {
+    "count": 0,
+    "max_asof_utc": null,
+    "min_asof_utc": null
+  }
+}
