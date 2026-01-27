@@ -1,12 +1,16 @@
 """Base adapter interface for PIT data sources."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from datetime import date
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
 import pandas as pd
 
-from alphaforge.time.ref_period import RefPeriod, RefFreq
 from nowcast_data.pit.core.models import PITObservation, SeriesMetadata
+
+if TYPE_CHECKING:
+    from alphaforge.time.ref_period import RefPeriod, RefFreq
 
 
 class PITAdapter(ABC):
@@ -81,10 +85,10 @@ class PITAdapter(ABC):
         self,
         series_id: str,
         asof_date: date,
-        start_ref: str | RefPeriod | None = None,
-        end_ref: str | RefPeriod | None = None,
+        start_ref: str | "RefPeriod" | None = None,
+        end_ref: str | "RefPeriod" | None = None,
         *,
-        freq: Optional[RefFreq] = None,
+        freq: Optional["RefFreq"] = None,
         metadata: Optional[SeriesMetadata] = None,
     ) -> List[PITObservation]:
         """Optional ref-period snapshot query."""
@@ -93,11 +97,11 @@ class PITAdapter(ABC):
     def fetch_revisions_ref(
         self,
         series_id: str,
-        ref: str | RefPeriod,
+        ref: str | "RefPeriod",
         start_asof: Optional[date] = None,
         end_asof: Optional[date] = None,
         *,
-        freq: Optional[RefFreq] = None,
+        freq: Optional["RefFreq"] = None,
         metadata: Optional[SeriesMetadata] = None,
     ) -> pd.Series:
         """Optional ref-period revision timeline query."""

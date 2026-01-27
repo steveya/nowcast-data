@@ -40,12 +40,12 @@ class AlphaForgePITAdapter(PITAdapter):
         # For now, assume all series from AlphaForge support PIT
         return True
 
-    def list_vintages(self, series_id: str) -> List[date]:
+    def list_vintages(self, query_series_key: str) -> List[date]:
         """
         List available vintage dates for a series.
         
         Args:
-            series_id: Source-specific series identifier
+            query_series_key: PIT series key stored in pit_observations
             
         Returns:
             List of vintage dates (sorted)
@@ -57,7 +57,7 @@ class AlphaForgePITAdapter(PITAdapter):
         conn = self._ctx.pit.conn
         rows = conn.execute(
             "SELECT DISTINCT asof_utc FROM pit_observations WHERE series_key = ?",
-            [series_id],
+            [query_series_key],
         ).fetchall()
         if not rows:
             return []

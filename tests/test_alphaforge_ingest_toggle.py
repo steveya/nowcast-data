@@ -2,28 +2,20 @@ from __future__ import annotations
 
 from datetime import date
 
-import pytest
-
 from alphaforge.data.context import DataContext
-from alphaforge.data.query import Query
 from alphaforge.store.duckdb_parquet import DuckDBParquetStore
 from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 
 
-class _FailingSource:
-    name = "fred"
-
-    def schemas(self) -> dict:
-        return {}
-
-    def fetch(self, q: Query):
-        raise AssertionError("fetch should not be called when ingest is disabled")
-
-
-def test_fetch_asof_skips_ingestion(tmp_path) -> None:
+def test_fetch_asof_skips_ingestion(tmp_path, monkeypatch) -> None:
     store = DuckDBParquetStore(root=str(tmp_path))
-    ctx = DataContext(sources={"fred": _FailingSource()}, calendars={}, store=store)
+    ctx = DataContext(sources={"fred": object()}, calendars={}, store=store)
     adapter = AlphaForgePITAdapter(ctx=ctx)
+
+    def _fail_fetch_panel(*args, **kwargs):
+        raise AssertionError("fetch_panel should not be called when ingest is disabled")
+
+    monkeypatch.setattr(ctx, "fetch_panel", _fail_fetch_panel)
 
     observations = adapter.fetch_asof(
         series_id="GDP",

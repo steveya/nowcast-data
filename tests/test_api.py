@@ -19,6 +19,7 @@ def test_get_series_asof_with_alphaforge_adapter(pit_context) -> None:
         asof_date=date(2025, 1, 15),
         start=date(2024, 12, 31),
         end=date(2024, 12, 31),
+        ingest_from_ctx_source=False,
     )
 
     assert df.empty is False

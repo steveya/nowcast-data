@@ -75,7 +75,9 @@ class PITDataManager:
         series_key: str,
         asof_date: date,
         start: Optional[date] = None,
-        end: Optional[date] = None
+        end: Optional[date] = None,
+        *,
+        ingest_from_ctx_source: bool = True,
     ) -> pd.DataFrame:
         """
         Get a single series as-of a specific date.
@@ -110,13 +112,23 @@ class PITDataManager:
             raise ValueError(f"No adapter available for source '{adapter_name}'")
         
         # Fetch data
-        observations = adapter.fetch_asof(
-            metadata.source_series_id,
-            asof_date,
-            start,
-            end,
-            metadata=metadata,
-        )
+        if isinstance(adapter, AlphaForgePITAdapter):
+            observations = adapter.fetch_asof(
+                metadata.source_series_id,
+                asof_date,
+                start,
+                end,
+                metadata=metadata,
+                ingest_from_ctx_source=ingest_from_ctx_source,
+            )
+        else:
+            observations = adapter.fetch_asof(
+                metadata.source_series_id,
+                asof_date,
+                start,
+                end,
+                metadata=metadata,
+            )
         
         # Convert to DataFrame
         df = create_pit_dataframe(observations)
