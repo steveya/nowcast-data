@@ -8,7 +8,7 @@ import requests
 import pandas as pd
 
 from nowcast_data.pit.adapters.base import PITAdapter
-from nowcast_data.pit.core.models import PITObservation
+from nowcast_data.pit.core.models import PITObservation, SeriesMetadata
 from nowcast_data.pit.exceptions import (
     PITNotSupportedError,
     VintageNotFoundError,
@@ -103,7 +103,9 @@ class FREDALFREDAdapter(PITAdapter):
         series_id: str,
         asof_date: date,
         start: Optional[date] = None,
-        end: Optional[date] = None
+        end: Optional[date] = None,
+        *,
+        metadata: Optional[SeriesMetadata] = None,
     ) -> List[PITObservation]:
         """
         Fetch observations as of asof_date using FRED realtime API.

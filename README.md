@@ -39,15 +39,18 @@ pip install -e ".[dev]"
 
 ## Quick Start
 
-### 1. Set up FRED API Key
+### 1. PIT Store Setup
 
-For US data access via FRED/ALFRED, you need an API key:
+AlphaForge is used as the PIT storage/query layer. Create a DuckDB-backed store and
+DataContext to automatically enable `ctx.pit`:
 
-```bash
-export FRED_API_KEY="your_api_key_here"
+```python
+from alphaforge.data.context import DataContext
+from alphaforge.store.duckdb_parquet import DuckDBParquetStore
+
+store = DuckDBParquetStore(root="./pit_store")
+ctx = DataContext(sources={}, calendars={}, store=store)
 ```
-
-Get a free API key at: https://fred.stlouisfed.org/docs/api/api_key.html
 
 ### 2. Basic Usage
 
@@ -74,7 +77,27 @@ df = manager.get_series_asof(
 print(df)
 ```
 
-### 3. Panel Data
+### 3. Reference Period Queries
+
+Reference period keys use `YYYY`, `YYYYQq`, `YYYY-MM`, or `YYYY/MM` formats.
+
+```python
+from datetime import date
+from alphaforge.time.ref_period import RefFreq
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
+
+adapter = AlphaForgePITAdapter(ctx=ctx)
+adapter.fetch_asof_ref("GDP", date(2025, 5, 15), start_ref="2024Q4", end_ref="2025Q1", freq=RefFreq.Q)
+adapter.fetch_revisions_ref("GDP", "2024Q4", freq=RefFreq.Q)
+```
+
+AlphaForge’s adapter can optionally ingest from `ctx.sources["fred"]` during
+`fetch_asof` (default `True`) before querying the PIT table. Set
+`ingest_from_ctx_source=False` to disable the source fetch side-effect; this flag
+is also available on `PITDataManager.get_series_asof` when using the AlphaForge
+adapter.
+
+### 4. Panel Data
 
 ```python
 # Get multiple series at once
@@ -87,7 +110,7 @@ panel = manager.get_panel_asof(
 )
 ```
 
-### 4. List Vintages
+### 5. List Vintages
 
 ```python
 # See all available vintages for a series
@@ -95,7 +118,7 @@ vintages = manager.get_series_vintages("US_GDP_SAAR")
 print(f"Available vintages: {len(vintages)}")
 ```
 
-### 5. Build PIT Cube
+### 6. Build PIT Cube
 
 ```python
 # Build cube: multiple series x multiple asof dates
@@ -116,6 +139,7 @@ cube = manager.build_pit_cube(
 ### Core Components
 
 1. **PIT Adapters** (`nowcast_data.pit.adapters`): Data source connectors
+   - `AlphaForgePITAdapter`: uses the canonical AlphaForge PIT table
    - `FREDALFREDAdapter`: US Federal Reserve data with real-time API
    - Other adapters (ECB, BoE, StatCan, Swiss): Stub implementations
 

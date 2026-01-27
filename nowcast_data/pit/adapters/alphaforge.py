@@ -1,22 +1,26 @@
 """Adapter for fetching data from AlphaForge."""
 
+from __future__ import annotations
+
 from datetime import date
 from typing import List, Optional
 
-from nowcast_data.pit.adapters.base import PITAdapter
-from nowcast_data.pit.core.models import PITObservation
+import pandas as pd
+from alphaforge.data.context import DataContext
 from alphaforge.data.query import Query
+from alphaforge.time.ref_period import RefPeriod, RefFreq
 
-# This is a temporary solution. In a real application, the FREDDataSource 
-# would be more centrally managed.
-from alphaforge.data.fred_source import FREDDataSource
+from nowcast_data.pit.adapters.base import PITAdapter
+from nowcast_data.pit.adapters.alphaforge_layer import AlphaForgePITLayer
+from nowcast_data.pit.core.models import PITObservation, SeriesMetadata
 
 
 class AlphaForgePITAdapter(PITAdapter):
     """Point-in-time data adapter for AlphaForge."""
 
-    def __init__(self, fred_api_key: str):
-        self._fred_source = FREDDataSource(api_key=fred_api_key)
+    def __init__(self, ctx: DataContext):
+        self._ctx = ctx
+        self._layer = AlphaForgePITLayer(ctx)
 
     @property
     def name(self) -> str:
@@ -36,12 +40,12 @@ class AlphaForgePITAdapter(PITAdapter):
         # For now, assume all series from AlphaForge support PIT
         return True
 
-    def list_vintages(self, series_id: str) -> List[date]:
+    def list_vintages(self, query_series_key: str) -> List[date]:
         """
         List available vintage dates for a series.
         
         Args:
-            series_id: Source-specific series identifier
+            query_series_key: PIT series key stored in pit_observations
             
         Returns:
             List of vintage dates (sorted)
@@ -50,16 +54,27 @@ class AlphaForgePITAdapter(PITAdapter):
             PITNotSupportedError: If series doesn't support vintages
             SourceFetchError: If fetching fails
         """
-        # This is not a complete implementation, but it will work for the test.
-        # A complete implementation would query the data source for available vintages.
-        return [date(2023, 1, 1)]
+        conn = self._ctx.pit.conn
+        rows = conn.execute(
+            "SELECT DISTINCT asof_utc FROM pit_observations WHERE series_key = ?",
+            [query_series_key],
+        ).fetchall()
+        if not rows:
+            return []
+        vintages = sorted(
+            {pd.Timestamp(row[0], tz="UTC").date() for row in rows if row[0] is not None}
+        )
+        return vintages
 
     def fetch_asof(
         self,
         series_id: str,
         asof_date: date,
         start: Optional[date] = None,
-        end: Optional[date] = None
+        end: Optional[date] = None,
+        *,
+        metadata: Optional[SeriesMetadata] = None,
+        ingest_from_ctx_source: bool = True,
     ) -> List[PITObservation]:
         """
         Fetch observations as they were known on asof_date.
@@ -78,29 +93,125 @@ class AlphaForgePITAdapter(PITAdapter):
             VintageNotFoundError: If no vintage available at asof_date
             SourceFetchError: If fetching fails
         """
-        query = Query(
-            table="fred_series",
-            columns=["value"],
-            entities=[series_id],
-            start=start,
-            end=end,
-            asof=asof_date,
+        source_series_id = metadata.source_series_id if metadata else series_id
+        query_series_key = metadata.series_key if metadata else series_id
+
+        asof_ts = pd.Timestamp(asof_date, tz="UTC")
+        start_ts = pd.Timestamp(start, tz="UTC") if start else None
+        end_ts = pd.Timestamp(end, tz="UTC") if end else None
+
+        if ingest_from_ctx_source and "fred" in self._ctx.sources:
+            query = Query(
+                table="fred_series",
+                columns=["value"],
+                entities=[source_series_id],
+                start=start_ts,
+                end=end_ts,
+                asof=asof_ts,
+            )
+            panel = self._ctx.fetch_panel("fred", query)
+            panel_df = panel.df.reset_index()
+            required = {"entity_id", "ts_utc", "asof_utc", "value"}
+            missing = required - set(panel_df.columns)
+            if missing:
+                raise ValueError(
+                    "Unexpected alphaforge panel schema; missing "
+                    f"{sorted(missing)}"
+                )
+
+            if metadata is None:
+                series_keys_from_df = panel_df["entity_id"]
+                series_key_values = series_keys_from_df
+            else:
+                series_keys_repeated = [query_series_key] * len(panel_df)
+                series_key_values = series_keys_repeated
+            pit_df = pd.DataFrame(
+                {
+                    "series_key": series_key_values,
+                    "obs_date": pd.to_datetime(panel_df["ts_utc"], utc=True).dt.floor("D"),
+                    "asof_utc": pd.to_datetime(panel_df["asof_utc"], utc=True),
+                    "value": panel_df["value"],
+                    "source": pd.NA,
+                    "revision_id": pd.NA,
+                    "meta_json": pd.NA,
+                    "release_time_utc": pd.NaT,
+                }
+            )
+            self._ctx.pit.upsert_pit_observations(pit_df)
+
+        snap = self._layer.snapshot(
+            query_series_key, asof=asof_ts, start=start_ts, end=end_ts
         )
-        
-        df = self._fred_source.fetch(query)
-        
+
         observations = []
-        for _, row in df.iterrows():
+        series_key = metadata.series_key if metadata else series_id
+        source_series_id = metadata.source_series_id if metadata else series_id
+        frequency = metadata.frequency if metadata else ""
+        source = metadata.source if metadata else "alphaforge"
+        for obs_date, value in snap.items():
             obs = PITObservation(
-                series_key=series_id, # This should be mapped from the catalog
-                source="alphaforge",
-                source_series_id=row["series_id"],
+                series_key=series_key,
+                source=source,
+                source_series_id=source_series_id,
                 asof_date=asof_date,
-                vintage_date=asof_date, # For FRED, asof_date is the vintage_date
-                obs_date=row["date"].date(),
-                value=row["value"],
-                frequency="", # This should be mapped from the catalog
+                vintage_date=asof_date,
+                obs_date=pd.Timestamp(obs_date).date(),
+                value=float(value),
+                frequency=frequency,
             )
             observations.append(obs)
-            
         return observations
+
+    def fetch_asof_ref(
+        self,
+        series_id: str,
+        asof_date: date,
+        start_ref: str | RefPeriod | None = None,
+        end_ref: str | RefPeriod | None = None,
+        *,
+        freq: Optional[RefFreq] = None,
+        metadata: Optional[SeriesMetadata] = None,
+    ) -> List[PITObservation]:
+        query_series_key = metadata.series_key if metadata else series_id
+        asof_ts = pd.Timestamp(asof_date, tz="UTC")
+        snap = self._layer.snapshot_ref(
+            query_series_key, asof=asof_ts, start_ref=start_ref, end_ref=end_ref, freq=freq
+        )
+        observations = []
+        series_key = metadata.series_key if metadata else series_id
+        source_series_id = metadata.source_series_id if metadata else series_id
+        source = metadata.source if metadata else "alphaforge"
+        frequency = metadata.frequency if metadata else (freq.value if freq else "")
+        for obs_date, value in snap.items():
+            obs = PITObservation(
+                series_key=series_key,
+                source=source,
+                source_series_id=source_series_id,
+                asof_date=asof_date,
+                vintage_date=asof_date,
+                obs_date=pd.Timestamp(obs_date).date(),
+                value=float(value),
+                frequency=frequency,
+            )
+            observations.append(obs)
+        return observations
+
+    def fetch_revisions_ref(
+        self,
+        series_id: str,
+        ref: str | RefPeriod,
+        start_asof: Optional[date] = None,
+        end_asof: Optional[date] = None,
+        *,
+        freq: Optional[RefFreq] = None,
+        metadata: Optional[SeriesMetadata] = None,
+    ) -> pd.Series:
+        start_ts = pd.Timestamp(start_asof, tz="UTC") if start_asof else None
+        end_ts = pd.Timestamp(end_asof, tz="UTC") if end_asof else None
+        query_series_key = metadata.series_key if metadata else series_id
+        series = self._layer.revisions_ref(
+            query_series_key, ref, start_asof=start_ts, end_asof=end_ts, freq=freq
+        )
+        if metadata is not None:
+            series = series.rename(metadata.series_key)
+        return series
