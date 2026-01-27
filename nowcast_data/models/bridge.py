@@ -12,11 +12,7 @@ from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 from nowcast_data.pit.api import PITDataManager
 from nowcast_data.pit.core.catalog import SeriesCatalog
 from nowcast_data.pit.core.models import SeriesMetadata
-from nowcast_data.time.nowcast_calendar import (
-    get_target_asof_ref,
-    infer_current_quarter,
-    refperiod_to_quarter_end,
-)
+from nowcast_data.time.nowcast_calendar import get_target_asof_ref, infer_current_quarter
 
 
 @dataclass
@@ -30,6 +26,7 @@ class BridgeConfig:
     min_train_quarters: int = 20
     include_partial_quarters: bool = True
     max_nan_fraction: float = 0.5
+    ingest_from_ctx_source: bool = False
 
 
 def _to_quarter_period(ts: pd.Timestamp) -> pd.Period:
@@ -60,7 +57,8 @@ def build_rt_quarterly_dataset(
     agg_spec: dict[str, str],
     asof_date: date,
     include_partial_quarters: bool = True,
-) -> tuple[pd.DataFrame, dict[str, int], dict[str, int]]:
+    ingest_from_ctx_source: bool = False,
+) -> tuple[pd.DataFrame, dict[str, int], dict[str, date | None]]:
     """Build quarterly aggregates for a single vintage date.
 
     Args:
@@ -71,11 +69,13 @@ def build_rt_quarterly_dataset(
         agg_spec: Mapping from series key to aggregation method.
         asof_date: Vintage date for point-in-time data.
         include_partial_quarters: Include the current quarter in the dataset.
+        ingest_from_ctx_source: Allow ingest from ctx sources (default False).
 
     Returns:
-        Tuple of (dataset, nobs_current, series_counts) with quarterly features/target.
+        Tuple of (dataset, nobs_current, last_obs_date_current_quarter).
     """
     predictor_series_keys = list(predictor_series_keys)
+    predictor_key_set = set(predictor_series_keys)
     series_keys = [target_series_key, *predictor_series_keys]
     metadata_by_key: dict[str, SeriesMetadata] = {}
     if catalog is not None:
@@ -87,10 +87,13 @@ def build_rt_quarterly_dataset(
     raw_by_key: dict[str, pd.Series] = {}
     for series_key in series_keys:
         meta = metadata_by_key.get(series_key)
-        query_key = (
-            meta.source_series_id if meta is not None and meta.source_series_id else series_key
+        # Always query PIT snapshots by canonical series_key; metadata controls source ingest.
+        observations = adapter.fetch_asof(
+            series_key,
+            asof_date,
+            metadata=meta,
+            ingest_from_ctx_source=ingest_from_ctx_source,
         )
-        observations = adapter.fetch_asof(query_key, asof_date, metadata=meta)
         if not observations:
             raw_by_key[series_key] = pd.Series(dtype="float64")
             continue
@@ -101,6 +104,21 @@ def build_rt_quarterly_dataset(
             }
         )
         data["obs_date"] = pd.to_datetime(data["obs_date"])
+        if (
+            meta is not None
+            and series_key in predictor_key_set
+            and str(meta.frequency).lower() == "m"
+        ):
+            obs_dates = data["obs_date"]
+            if getattr(obs_dates.dt, "tz", None) is not None:
+                obs_dates = obs_dates.dt.tz_localize(None)
+            non_month_end = obs_dates.loc[~obs_dates.dt.is_month_end]
+            if not non_month_end.empty:
+                sample = non_month_end.dt.strftime("%Y-%m-%d").unique()[:3].tolist()
+                raise ValueError(
+                    "Monthly predictor series "
+                    f"'{series_key}' has non-month-end obs_date values: {sample}"
+                )
         series = pd.Series(data["value"].to_numpy(), index=pd.DatetimeIndex(data["obs_date"]))
         raw_by_key[series_key] = series.sort_index()
 
@@ -115,18 +133,17 @@ def build_rt_quarterly_dataset(
         name="ref_quarter",
     )
 
-    current_quarter = _to_quarter_period(refperiod_to_quarter_end(infer_current_quarter(asof_date)))
+    current_quarter = pd.Period(str(infer_current_quarter(asof_date)), freq="Q")
     if include_partial_quarters:
-        keep_quarters = quarter_index <= current_quarter
-    else:
-        keep_quarters = quarter_index < current_quarter
-    quarter_index = quarter_index[keep_quarters]
-    if include_partial_quarters and current_quarter not in quarter_index:
         quarter_index = (
             pd.Index(quarter_index, name="ref_quarter")
             .union(pd.Index([current_quarter], name="ref_quarter"))
             .sort_values()
         )
+        keep_quarters = quarter_index <= current_quarter
+    else:
+        keep_quarters = quarter_index < current_quarter
+    quarter_index = quarter_index[keep_quarters]
 
     if quarter_index.empty:
         dataset = pd.DataFrame(columns=["y"], index=quarter_index)
@@ -134,11 +151,13 @@ def build_rt_quarterly_dataset(
 
     predictor_frame = pd.DataFrame(index=quarter_index)
     nobs_current: dict[str, int] = {}
+    last_obs_date_current_quarter: dict[str, date | None] = {}
     for series_key in predictor_series_keys:
         series = raw_by_key.get(series_key, pd.Series(dtype="float64"))
         if series.empty:
             predictor_frame[series_key] = np.nan
             nobs_current[series_key] = 0
+            last_obs_date_current_quarter[series_key] = None
             continue
         series = series.sort_index()
         grouped = series.groupby(series.index.map(_to_quarter_period))
@@ -147,19 +166,28 @@ def build_rt_quarterly_dataset(
         predictor_frame[series_key] = predictor_frame[series_key].reindex(quarter_index)
         current_series = series.loc[series.index.map(_to_quarter_period) == current_quarter]
         nobs_current[series_key] = int(current_series.notna().sum())
+        last_obs_date_current_quarter[series_key] = (
+            pd.Timestamp(current_series.index.max()).date() if not current_series.empty else None
+        )
 
-    target_series = raw_by_key.get(target_series_key, pd.Series(dtype="float64"))
-    if not target_series.empty:
-        target_series = target_series.sort_index()
-        target_quarters = target_series.groupby(target_series.index.map(_to_quarter_period)).last()
-        target_quarters = target_quarters.reindex(quarter_index)
-    else:
-        target_quarters = pd.Series(index=quarter_index, dtype="float64")
+    target_meta = metadata_by_key.get(target_series_key)
+    target_values = []
+    for ref_quarter in quarter_index:
+        # Use ref-period snapshots for all quarters to align with PIT target semantics.
+        ref_value = get_target_asof_ref(
+            adapter,
+            target_series_key,
+            asof_date,
+            ref=str(ref_quarter),
+            metadata=target_meta,
+        )
+        target_values.append(ref_value if ref_value is not None else np.nan)
+    target_quarters = pd.Series(target_values, index=quarter_index, dtype="float64")
 
     dataset = predictor_frame.copy()
     dataset["y"] = target_quarters
     dataset.index.name = "ref_quarter"
-    return dataset, nobs_current, {key: len(series) for key, series in raw_by_key.items()}
+    return dataset, nobs_current, last_obs_date_current_quarter
 
 
 class BridgeNowcaster:
@@ -224,9 +252,9 @@ class BridgeNowcaster:
     def fit_predict_one(self, asof_date: date) -> dict:
         """Fit the model for a single vintage date and return diagnostics."""
         current_ref = infer_current_quarter(asof_date)
-        current_quarter = _to_quarter_period(refperiod_to_quarter_end(current_ref))
+        current_quarter = pd.Period(str(current_ref), freq="Q")
 
-        dataset, nobs_current, _ = build_rt_quarterly_dataset(
+        dataset, nobs_current, last_obs_date_current_quarter = build_rt_quarterly_dataset(
             self.adapter,
             self.catalog,
             target_series_key=self.config.target_series_key,
@@ -234,6 +262,7 @@ class BridgeNowcaster:
             agg_spec=self.config.agg_spec,
             asof_date=asof_date,
             include_partial_quarters=self.config.include_partial_quarters,
+            ingest_from_ctx_source=self.config.ingest_from_ctx_source,
         )
 
         if dataset.empty or current_quarter not in dataset.index:
@@ -246,6 +275,8 @@ class BridgeNowcaster:
                 "n_features": 0,
                 "alpha_selected": np.nan,
                 "mean_months_observed": np.nan,
+                "last_obs_date_current_quarter": {},
+                "nobs_current": {},
             }
 
         train_X, train_y, current_X, _ = self._prepare_features(dataset, current_quarter)
@@ -264,17 +295,21 @@ class BridgeNowcaster:
                 "mean_months_observed": float(np.mean(list(nobs_current.values())))
                 if nobs_current
                 else np.nan,
+                "last_obs_date_current_quarter": last_obs_date_current_quarter,
+                "nobs_current": nobs_current,
             }
 
         model = RidgeCV(alphas=self.config.alphas)
         model.fit(train_X.to_numpy(), train_y.to_numpy())
         y_pred = float(model.predict(current_X.to_numpy().reshape(1, -1))[0])
 
+        target_meta = self.catalog.get(self.config.target_series_key) if self.catalog else None
         y_true = get_target_asof_ref(
             self.adapter,
             self.config.target_series_key,
             asof_date,
             ref=current_ref,
+            metadata=target_meta,
         )
 
         return {
@@ -288,6 +323,8 @@ class BridgeNowcaster:
             "mean_months_observed": float(np.mean(list(nobs_current.values())))
             if nobs_current
             else np.nan,
+            "last_obs_date_current_quarter": last_obs_date_current_quarter,
+            "nobs_current": nobs_current,
         }
 
     def predict_many(self, vintages: Iterable[date]) -> pd.DataFrame:

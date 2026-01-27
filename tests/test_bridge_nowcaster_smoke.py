@@ -18,6 +18,12 @@ def test_bridge_nowcaster_smoke(pit_context) -> None:
     pit_rows = [
         {
             "series_key": "GDP",
+            "obs_date": "2024-09-30",
+            "asof_utc": "2024-11-10",
+            "value": 0.8,
+        },
+        {
+            "series_key": "GDP",
             "obs_date": "2024-12-31",
             "asof_utc": "2025-02-10",
             "value": 1.0,
@@ -26,7 +32,7 @@ def test_bridge_nowcaster_smoke(pit_context) -> None:
             "series_key": "GDP",
             "obs_date": "2025-03-31",
             "asof_utc": "2025-05-01",
-            "value": 1.5,
+            "value": 1.2,
         },
     ]
     for series_key, base_value in [("P1", 100.0), ("P2", 200.0)]:
@@ -72,6 +78,8 @@ def test_bridge_nowcaster_smoke(pit_context) -> None:
         "n_features",
         "alpha_selected",
         "mean_months_observed",
+        "last_obs_date_current_quarter",
+        "nobs_current",
     ]:
         assert key in result
 
