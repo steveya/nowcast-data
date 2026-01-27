@@ -29,6 +29,7 @@ class BridgeConfig:
     alphas: list[float] = field(default_factory=lambda: list(np.logspace(-4, 4, 20)))
     min_train_quarters: int = 20
     include_partial_quarters: bool = True
+    max_nan_fraction: float = 0.5
 
 
 def _to_quarter_period(ts: pd.Timestamp) -> pd.Period:
@@ -45,6 +46,8 @@ def _agg_series(series: pd.Series, method: str) -> float:
         return float(series.sum())
     if method == "last":
         return float(series.iloc[-1])
+    if method == "mean":
+        return float(series.mean())
     return float(series.mean())
 
 
@@ -58,6 +61,20 @@ def build_rt_quarterly_dataset(
     asof_date: date,
     include_partial_quarters: bool = True,
 ) -> tuple[pd.DataFrame, dict[str, int], dict[str, int]]:
+    """Build quarterly aggregates for a single vintage date.
+
+    Args:
+        adapter: PIT adapter used to fetch series snapshots.
+        catalog: Optional series catalog for metadata lookup.
+        target_series_key: Series key for the quarterly target.
+        predictor_series_keys: Series keys for monthly predictors.
+        agg_spec: Mapping from series key to aggregation method.
+        asof_date: Vintage date for point-in-time data.
+        include_partial_quarters: Include the current quarter in the dataset.
+
+    Returns:
+        Tuple of (dataset, nobs_current, series_counts) with quarterly features/target.
+    """
     predictor_series_keys = list(predictor_series_keys)
     series_keys = [target_series_key, *predictor_series_keys]
     metadata_by_key: dict[str, SeriesMetadata] = {}
@@ -105,8 +122,11 @@ def build_rt_quarterly_dataset(
         keep_quarters = quarter_index < current_quarter
     quarter_index = quarter_index[keep_quarters]
     if include_partial_quarters and current_quarter not in quarter_index:
-        quarter_index = quarter_index.append(pd.Index([current_quarter], name="ref_quarter"))
-        quarter_index = quarter_index.sort_values()
+        quarter_index = (
+            pd.Index(quarter_index, name="ref_quarter")
+            .union(pd.Index([current_quarter], name="ref_quarter"))
+            .sort_values()
+        )
 
     if quarter_index.empty:
         dataset = pd.DataFrame(columns=["y"], index=quarter_index)
@@ -143,6 +163,11 @@ def build_rt_quarterly_dataset(
 
 
 class BridgeNowcaster:
+    """Baseline bridge nowcasting model using quarterly aggregates.
+
+    Fits a ridge regression on historical quarters and predicts GDP for the
+    current quarter inferred from the as-of date.
+    """
     def __init__(
         self,
         config: BridgeConfig,
@@ -166,6 +191,11 @@ class BridgeNowcaster:
         pd.Series,
         dict[str, pd.Series],
     ]:
+        """Prepare training/current-quarter features with basic preprocessing.
+
+        Drops features with too many missing values, imputes remaining NaNs,
+        and optionally standardizes the predictors based on the training window.
+        """
         predictors = dataset.drop(columns=["y"])
         target = dataset["y"]
 
@@ -174,7 +204,7 @@ class BridgeNowcaster:
         train_y = target.loc[train_mask].copy()
 
         nan_frac = train_X.isna().mean()
-        train_X = train_X.loc[:, nan_frac <= 0.5]
+        train_X = train_X.loc[:, nan_frac <= self.config.max_nan_fraction]
 
         means = train_X.mean()
         train_X = train_X.fillna(means)
@@ -192,6 +222,7 @@ class BridgeNowcaster:
         return train_X, train_y, current_X.iloc[0], stats
 
     def fit_predict_one(self, asof_date: date) -> dict:
+        """Fit the model for a single vintage date and return diagnostics."""
         current_ref = infer_current_quarter(asof_date)
         current_quarter = _to_quarter_period(refperiod_to_quarter_end(current_ref))
 
@@ -260,6 +291,7 @@ class BridgeNowcaster:
         }
 
     def predict_many(self, vintages: Iterable[date]) -> pd.DataFrame:
+        """Predict GDP for multiple vintages and return a tidy DataFrame."""
         rows = [self.fit_predict_one(vintage) for vintage in vintages]
         df = pd.DataFrame(rows)
         if not df.empty:
