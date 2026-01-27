@@ -93,6 +93,9 @@ class AlphaForgePITAdapter(PITAdapter):
             VintageNotFoundError: If no vintage available at asof_date
             SourceFetchError: If fetching fails
         """
+        source_series_id = metadata.source_series_id if metadata else series_id
+        query_series_key = metadata.series_key if metadata else series_id
+
         asof_ts = pd.Timestamp(asof_date, tz="UTC")
         start_ts = pd.Timestamp(start, tz="UTC") if start else None
         end_ts = pd.Timestamp(end, tz="UTC") if end else None
@@ -101,7 +104,7 @@ class AlphaForgePITAdapter(PITAdapter):
             query = Query(
                 table="fred_series",
                 columns=["value"],
-                entities=[series_id],
+                entities=[source_series_id],
                 start=start_ts,
                 end=end_ts,
                 asof=asof_ts,
@@ -116,9 +119,15 @@ class AlphaForgePITAdapter(PITAdapter):
                     f"{sorted(missing)}"
                 )
 
+            if metadata is None:
+                series_keys_from_df = panel_df["entity_id"]
+                series_key_values = series_keys_from_df
+            else:
+                series_keys_repeated = [query_series_key] * len(panel_df)
+                series_key_values = series_keys_repeated
             pit_df = pd.DataFrame(
                 {
-                    "series_key": panel_df["entity_id"],
+                    "series_key": series_key_values,
                     "obs_date": pd.to_datetime(panel_df["ts_utc"], utc=True).dt.floor("D"),
                     "asof_utc": pd.to_datetime(panel_df["asof_utc"], utc=True),
                     "value": panel_df["value"],
@@ -130,7 +139,6 @@ class AlphaForgePITAdapter(PITAdapter):
             )
             self._ctx.pit.upsert_pit_observations(pit_df)
 
-        query_series_key = series_id
         snap = self._layer.snapshot(
             query_series_key, asof=asof_ts, start=start_ts, end=end_ts
         )
@@ -164,9 +172,10 @@ class AlphaForgePITAdapter(PITAdapter):
         freq: Optional[RefFreq] = None,
         metadata: Optional[SeriesMetadata] = None,
     ) -> List[PITObservation]:
+        query_series_key = metadata.series_key if metadata else series_id
         asof_ts = pd.Timestamp(asof_date, tz="UTC")
         snap = self._layer.snapshot_ref(
-            series_id, asof=asof_ts, start_ref=start_ref, end_ref=end_ref, freq=freq
+            query_series_key, asof=asof_ts, start_ref=start_ref, end_ref=end_ref, freq=freq
         )
         observations = []
         series_key = metadata.series_key if metadata else series_id
@@ -199,7 +208,7 @@ class AlphaForgePITAdapter(PITAdapter):
     ) -> pd.Series:
         start_ts = pd.Timestamp(start_asof, tz="UTC") if start_asof else None
         end_ts = pd.Timestamp(end_asof, tz="UTC") if end_asof else None
-        query_series_key = series_id
+        query_series_key = metadata.series_key if metadata else series_id
         series = self._layer.revisions_ref(
             query_series_key, ref, start_asof=start_ts, end_asof=end_ts, freq=freq
         )

@@ -209,6 +209,8 @@ class PITDataManager:
         if not adapter:
             raise ValueError(f"No adapter available for source '{adapter_name}'")
         
+        if isinstance(adapter, AlphaForgePITAdapter):
+            return adapter.list_vintages(metadata.series_key)
         return adapter.list_vintages(metadata.source_series_id)
     
     def get_panel_vintages(self, series_keys: List[str]) -> Dict[str, List[date]]:
