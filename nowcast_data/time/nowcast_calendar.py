@@ -52,7 +52,7 @@ def infer_previous_quarter(asof_date: date) -> "RefPeriod | _FallbackRefPeriod":
 def refperiod_to_quarter_end(ref: "RefPeriod | _FallbackRefPeriod | str") -> date:
     """Convert a ref period to its quarter-end date."""
     ref_str = str(ref)
-    match = re.match(r"^(\d{4})Q(\d)$", ref_str)
+    match = re.match(r"^(\d{4})Q(\d+)$", ref_str)
     if not match:
         raise ValueError("Expected quarterly RefPeriod")
     year = int(match.group(1))
