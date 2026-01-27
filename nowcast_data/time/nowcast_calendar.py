@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import re
 from typing import Optional
 
 try:  # pragma: no cover - optional dependency
@@ -48,14 +49,16 @@ def infer_previous_quarter(asof_date: date) -> "RefPeriod | _FallbackRefPeriod":
     return _make_ref_period(year, quarter)
 
 
-def refperiod_to_quarter_end(ref: "RefPeriod | _FallbackRefPeriod") -> date:
+def refperiod_to_quarter_end(ref: "RefPeriod | _FallbackRefPeriod | str") -> date:
     """Convert a ref period to its quarter-end date."""
     ref_str = str(ref)
-    if "Q" not in ref_str:
-        raise ValueError(f"Expected quarterly RefPeriod, got {ref_str}")
-    year_str, quarter_str = ref_str.split("Q", 1)
-    year = int(year_str)
-    quarter = int(quarter_str)
+    match = re.match(r"^(\d{4})Q(\d)$", ref_str)
+    if not match:
+        raise ValueError("Expected quarterly RefPeriod")
+    year = int(match.group(1))
+    quarter = int(match.group(2))
+    if quarter not in {1, 2, 3, 4}:
+        raise ValueError("Invalid quarter")
     if quarter == 1:
         return date(year, 3, 31)
     if quarter == 2:
@@ -96,7 +99,7 @@ def get_target_asof_ref(
     """
     if freq is None and RefFreq is not None:
         freq = RefFreq.Q
-    if adapter.fetch_asof_ref is PITAdapter.fetch_asof_ref:
+    if type(adapter).fetch_asof_ref is PITAdapter.fetch_asof_ref:
         adapter_name = getattr(adapter, "name", adapter.__class__.__name__)
         raise NotImplementedError(
             f"Adapter '{adapter_name}' does not support ref-period snapshots"
