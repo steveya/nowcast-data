@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
+from inspect import signature
 from typing import Iterable
 
 import numpy as np
@@ -91,14 +92,15 @@ def build_rt_quarterly_dataset(
     for series_key in series_keys:
         meta = metadata_by_key.get(series_key)
         # Always query PIT snapshots by canonical series_key; metadata controls source ingest.
-        try:
+        fetch_params = signature(adapter.fetch_asof).parameters
+        if "ingest_from_ctx_source" in fetch_params:
             observations = adapter.fetch_asof(
                 series_key,
                 asof_date,
                 metadata=meta,
                 ingest_from_ctx_source=ingest_from_ctx_source,
             )
-        except TypeError:
+        else:
             observations = adapter.fetch_asof(series_key, asof_date, metadata=meta)
         if not observations:
             raw_by_key[series_key] = pd.Series(dtype="float64")
