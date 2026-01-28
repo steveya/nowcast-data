@@ -19,7 +19,7 @@ def main() -> None:
     manager = PITDataManager(catalog)
 
     asof_date = date(2025, 5, 15)
-    evaluation_asof_date = date.today()
+    evaluation_asof_date = date(2025, 7, 15)
 
     config = VintageTrainingDatasetConfig(
         target_series_key="US_GDP_SAAR",

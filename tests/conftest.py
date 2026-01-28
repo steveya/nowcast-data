@@ -36,8 +36,25 @@ def pit_context(tmp_path: Path) -> DataContext:
         },
     ]
     data = pd.DataFrame(
-        [{"series_key": "GDP", **row} for row in base_rows]
+        [{"series_key": "BASE_GDP", **row} for row in base_rows]
         + [{"series_key": "US_GDP_SAAR", **row} for row in base_rows]
     )
+    gdp_rows = pd.DataFrame(
+        [
+            {
+                "series_key": "GDP",
+                "obs_date": "2024-12-31",
+                "asof_utc": "2025-01-15",
+                "value": 3.0,
+            },
+            {
+                "series_key": "GDP",
+                "obs_date": "2024-12-31",
+                "asof_utc": "2025-03-01",
+                "value": 3.5,
+            },
+        ]
+    )
+    data = pd.concat([data, gdp_rows], ignore_index=True)
     ctx.pit.upsert_pit_observations(data)
     return ctx

@@ -12,7 +12,7 @@ def test_bridge_builder_no_leakage(pit_context) -> None:
 
     pit_rows = [
         {
-            "series_key": "GDP",
+            "series_key": "BASE_GDP",
             "obs_date": "2025-03-31",
             "asof_utc": "2025-05-01",
             "value": 1.0,
@@ -48,7 +48,7 @@ def test_bridge_builder_no_leakage(pit_context) -> None:
     dataset, _, _ = build_rt_quarterly_dataset(
         adapter,
         None,
-        target_series_key="GDP",
+        target_series_key="BASE_GDP",
         predictor_series_keys=["P1"],
         agg_spec={"P1": "last"},
         asof_date=asof_date,

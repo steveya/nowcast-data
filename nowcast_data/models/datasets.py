@@ -31,7 +31,9 @@ class VintageTrainingDatasetConfig:
     include_partial_quarters: bool = True
     ref_offsets: list[int] = field(default_factory=lambda: [-1, 0, 1])
     evaluation_asof_date: date | None = None
-    final_target_policy: TargetPolicy = TargetPolicy(mode="latest_available", max_release_rank=3)
+    final_target_policy: TargetPolicy = field(
+        default_factory=lambda: TargetPolicy(mode="latest_available", max_release_rank=3)
+    )
     target_feature_spec: QuarterlyTargetFeatureSpec | None = None
 
 
@@ -191,7 +193,9 @@ def build_vintage_training_dataset(
     desired_index = pd.PeriodIndex(desired_quarters, freq="Q", name="ref_quarter")
     predictor_frame = predictor_frame.reindex(desired_index)
 
-    evaluation_asof_date = config.evaluation_asof_date or date.today()
+    if config.evaluation_asof_date is None:
+        raise ValueError("evaluation_asof_date must be provided in VintageTrainingDatasetConfig")
+    evaluation_asof_date = config.evaluation_asof_date
     y_asof_values: list[float] = []
     y_final_values: list[float] = []
     feature_rows: list[dict[str, float]] = []

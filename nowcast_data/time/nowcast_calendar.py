@@ -41,6 +41,24 @@ def _refperiod_to_key(ref: "RefPeriod | _FallbackRefPeriod | str") -> str:
     return str(ref)
 
 
+def _refperiod_to_obs_date(ref: "RefPeriod | _FallbackRefPeriod | str") -> date:
+    ref_key = _refperiod_to_key(ref)
+    match = re.match(r"^(\d{4})Q(\d+)$", ref_key)
+    if not match:
+        raise ValueError(f"Expected quarterly RefPeriod in format YYYYQN, got {ref_key}")
+    year = int(match.group(1))
+    quarter = int(match.group(2))
+    if quarter not in {1, 2, 3, 4}:
+        raise ValueError(f"Invalid quarter: {quarter}. Must be 1, 2, 3, or 4")
+    if quarter == 1:
+        return date(year, 3, 31)
+    if quarter == 2:
+        return date(year, 6, 30)
+    if quarter == 3:
+        return date(year, 9, 30)
+    return date(year, 12, 31)
+
+
 def infer_current_quarter(asof_date: date) -> "RefPeriod | _FallbackRefPeriod":
     """Infer the current reference quarter from an asof date."""
     quarter = ((asof_date.month - 1) // 3) + 1
@@ -61,21 +79,7 @@ def infer_previous_quarter(asof_date: date) -> "RefPeriod | _FallbackRefPeriod":
 
 def refperiod_to_quarter_end(ref: "RefPeriod | _FallbackRefPeriod | str") -> date:
     """Convert a ref period to its quarter-end date."""
-    ref_str = _refperiod_to_key(ref)
-    match = re.match(r"^(\d{4})Q(\d+)$", ref_str)
-    if not match:
-        raise ValueError(f"Expected quarterly RefPeriod in format YYYYQN, got {ref_str}")
-    year = int(match.group(1))
-    quarter = int(match.group(2))
-    if quarter not in {1, 2, 3, 4}:
-        raise ValueError(f"Invalid quarter: {quarter}. Must be 1, 2, 3, or 4")
-    if quarter == 1:
-        return date(year, 3, 31)
-    if quarter == 2:
-        return date(year, 6, 30)
-    if quarter == 3:
-        return date(year, 9, 30)
-    return date(year, 12, 31)
+    return _refperiod_to_obs_date(ref)
 
 
 def get_target_asof_ref(
@@ -121,10 +125,19 @@ def get_target_asof_ref(
         freq=freq,
         metadata=metadata,
     )
-    if not observations:
-        return None
-    if len(observations) > 1:
+    if observations and len(observations) > 1:
         raise ValueError(
             f"Expected single observation for ref period, got {len(observations)}"
         )
-    return observations[0].value
+    if observations:
+        return observations[0].value
+    obs_date = _refperiod_to_obs_date(ref)
+    series_key = metadata.series_key if metadata is not None else series_id_or_key
+    fallback = adapter.list_pit_observations_asof(
+        series_key=series_key,
+        obs_date=obs_date,
+        asof_date=asof_date,
+    )
+    if fallback.empty:
+        return None
+    return float(fallback.iloc[-1]["value"])
