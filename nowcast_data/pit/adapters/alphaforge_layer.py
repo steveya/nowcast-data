@@ -1,10 +1,24 @@
 """Thin adapter wrapper around AlphaForge PIT APIs."""
 
+from datetime import date
 from typing import Optional
 
 import pandas as pd
 from alphaforge.data.context import DataContext
 from alphaforge.time.ref_period import RefPeriod, RefFreq
+
+
+def _coerce_utc_timestamp(value: date | pd.Timestamp) -> pd.Timestamp:
+    ts = pd.Timestamp(value)
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("UTC")
+    else:
+        ts = ts.tz_convert("UTC")
+    return ts
+
+
+def _normalize_utc_day(value: date | pd.Timestamp) -> date:
+    return _coerce_utc_timestamp(value).normalize().date()
 
 
 class AlphaForgePITLayer:
@@ -73,3 +87,40 @@ class AlphaForgePITLayer:
 
     def upsert(self, df: pd.DataFrame) -> None:
         self._ctx.pit.upsert_pit_observations(df)
+
+    def list_pit_observations_asof(
+        self,
+        *,
+        series_key: str,
+        obs_date: date,
+        asof_date: date,
+    ) -> pd.DataFrame:
+        if self._ctx.pit is None:
+            raise ValueError("PIT store is not available; cannot list PIT observations.")
+        conn = self._ctx.pit.conn
+        obs_day = _normalize_utc_day(obs_date)
+        asof_cutoff = _coerce_utc_timestamp(asof_date).normalize() + pd.Timedelta(days=1)
+        df = conn.execute(
+            """
+            SELECT series_key, obs_date, asof_utc, value
+            FROM pit_observations
+            WHERE series_key = ?
+              AND DATE(obs_date) = ?
+              AND asof_utc < ?
+            ORDER BY asof_utc ASC
+            """,
+            [series_key, obs_day, asof_cutoff],
+        ).fetchdf()
+        if df.empty:
+            return pd.DataFrame(
+                {
+                    "series_key": pd.Series(dtype="object"),
+                    "obs_date": pd.Series(dtype="datetime64[ns, UTC]"),
+                    "asof_utc": pd.Series(dtype="datetime64[ns, UTC]"),
+                    "value": pd.Series(dtype="float64"),
+                }
+            )
+
+        df["obs_date"] = pd.to_datetime(df["obs_date"], utc=True).dt.floor("D")
+        df["asof_utc"] = pd.to_datetime(df["asof_utc"], utc=True)
+        return df
