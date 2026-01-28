@@ -87,6 +87,25 @@ class AlphaForgePITAdapter(PITAdapter):
         )
         return vintages
 
+    def list_pit_observations_asof(
+        self,
+        *,
+        series_key: str,
+        obs_date: date,
+        asof_date: date,
+    ) -> pd.DataFrame:
+        """
+        List all PIT observations for a series/obs_date up to an as-of date.
+
+        Returns:
+            DataFrame with columns: series_key, obs_date, asof_utc, value
+        """
+        return self._layer.list_pit_observations_asof(
+            series_key=series_key,
+            obs_date=obs_date,
+            asof_date=asof_date,
+        )
+
     def fetch_asof(
         self,
         series_id: str,
