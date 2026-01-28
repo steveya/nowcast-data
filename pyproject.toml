@@ -30,6 +30,7 @@ dependencies = [
     "requests>=2.31.0",
     "python-dateutil>=2.8.0",
     "fredapi",
+    "scikit-learn>=1.3.0",
     "alphaforge @ git+https://github.com/steveya/alphaforge",
     "duckdb>=0.9.0",
     "python-dotenv",
@@ -60,6 +61,7 @@ packages = [
     "nowcast_data.pit.adapters",
     "nowcast_data.pit.core",
     "nowcast_data.pit.storage",
+    "nowcast_data.models",
     "nowcast_data.time",
 ]
 
