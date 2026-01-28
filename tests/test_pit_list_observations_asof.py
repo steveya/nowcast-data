@@ -55,6 +55,10 @@ def test_list_pit_observations_asof_empty(pit_context) -> None:
         asof_date=date(2025, 6, 1),
     )
     assert empty_series.empty
+    assert empty_series.dtypes["series_key"] == "object"
+    assert str(empty_series.dtypes["obs_date"]) == "datetime64[ns, UTC]"
+    assert str(empty_series.dtypes["asof_utc"]) == "datetime64[ns, UTC]"
+    assert str(empty_series.dtypes["value"]) == "float64"
 
     empty_obs = adapter.list_pit_observations_asof(
         series_key="GDP",
