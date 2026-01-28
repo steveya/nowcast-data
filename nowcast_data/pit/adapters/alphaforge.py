@@ -97,6 +97,11 @@ class AlphaForgePITAdapter(PITAdapter):
         """
         List all PIT observations for a series/obs_date up to an as-of date.
 
+        Args:
+            series_key: PIT series key stored in pit_observations.
+            obs_date: Observation date (day-granularity).
+            asof_date: As-of date treated as end-of-day UTC.
+
         Returns:
             DataFrame with columns: series_key, obs_date, asof_utc, value
         """

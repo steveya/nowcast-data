@@ -44,3 +44,28 @@ def test_list_pit_observations_asof(pit_context) -> None:
     )
     assert len(late) == 2
     assert late["value"].tolist() == [1.0, 1.1]
+
+
+def test_list_pit_observations_asof_empty(pit_context) -> None:
+    adapter = AlphaForgePITAdapter(ctx=pit_context)
+
+    empty_series = adapter.list_pit_observations_asof(
+        series_key="NOPE",
+        obs_date=date(2025, 3, 31),
+        asof_date=date(2025, 6, 1),
+    )
+    assert empty_series.empty
+
+    empty_obs = adapter.list_pit_observations_asof(
+        series_key="GDP",
+        obs_date=date(2023, 12, 31),
+        asof_date=date(2025, 6, 1),
+    )
+    assert empty_obs.empty
+
+    empty_asof = adapter.list_pit_observations_asof(
+        series_key="GDP",
+        obs_date=date(2025, 3, 31),
+        asof_date=date(2024, 12, 31),
+    )
+    assert empty_asof.empty

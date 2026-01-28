@@ -95,9 +95,6 @@ class AlphaForgePITLayer:
         obs_date: date,
         asof_date: date,
     ) -> pd.DataFrame:
-        if self._ctx.pit is None:
-            raise ValueError("DataContext does not have PIT enabled")
-
         conn = self._ctx.pit.conn
         obs_day = _normalize_utc_day(obs_date)
         asof_cutoff = _coerce_utc_timestamp(asof_date).normalize() + pd.Timedelta(days=1)
