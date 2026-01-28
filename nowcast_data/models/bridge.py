@@ -100,6 +100,18 @@ def build_rt_quarterly_dataset(
         Tuple of (dataset, nobs_current, last_obs_date_current_quarter).
     """
     predictor_series_keys = list(predictor_series_keys)
+    extra_agg_keys = set(agg_spec) - set(predictor_series_keys)
+    if extra_agg_keys:
+        raise ValueError(f"agg_spec contains non-predictor keys: {sorted(extra_agg_keys)}")
+    if target_series_key in predictor_series_keys:
+        raise ValueError("target_series_key must not be in predictor_series_keys")
+    allowed_methods = {"mean", "sum", "last"}
+    invalid_methods = {
+        key: method for key, method in agg_spec.items() if method.lower() not in allowed_methods
+    }
+    if invalid_methods:
+        formatted = ", ".join(f"{key}={method}" for key, method in invalid_methods.items())
+        raise ValueError(f"agg_spec contains invalid methods: {formatted}")
     predictor_key_set = set(predictor_series_keys)
     series_keys = [target_series_key, *predictor_series_keys]
     metadata_by_key: dict[str, SeriesMetadata] = {}
