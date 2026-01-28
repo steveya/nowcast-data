@@ -1,5 +1,6 @@
 import os
 from datetime import date
+from pathlib import Path
 from dotenv import load_dotenv
 import pandas as pd
 
@@ -58,7 +59,7 @@ def get_usgdp_point_in_time():
     print(result_series.unstack(level=0))
 
     outpath = Path("outputs/get_usgdp")
-    outpath.mkdir(exist_ok=True, parents=True
+    outpath.mkdir(exist_ok=True, parents=True)
     result_series.to_csv(outpath / "us_gdp_point_in_time.csv")
 
 if __name__ == "__main__":

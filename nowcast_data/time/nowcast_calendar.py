@@ -26,9 +26,19 @@ class _FallbackRefPeriod:
 
 
 def _make_ref_period(year: int, quarter: int) -> "RefPeriod | _FallbackRefPeriod":
+    ref_str = f"{year}Q{quarter}"
     if RefPeriod is None:
         return _FallbackRefPeriod(year=year, quarter=quarter)
-    return RefPeriod.parse(f"{year}Q{quarter}")
+    ref = RefPeriod.parse(ref_str)
+    if str(ref) != ref_str:
+        return _FallbackRefPeriod(year=year, quarter=quarter)
+    return ref
+
+
+def _refperiod_to_key(ref: "RefPeriod | _FallbackRefPeriod | str") -> str:
+    if hasattr(ref, "to_key"):
+        return ref.to_key()  # type: ignore[no-any-return]
+    return str(ref)
 
 
 def infer_current_quarter(asof_date: date) -> "RefPeriod | _FallbackRefPeriod":
@@ -51,7 +61,7 @@ def infer_previous_quarter(asof_date: date) -> "RefPeriod | _FallbackRefPeriod":
 
 def refperiod_to_quarter_end(ref: "RefPeriod | _FallbackRefPeriod | str") -> date:
     """Convert a ref period to its quarter-end date."""
-    ref_str = str(ref)
+    ref_str = _refperiod_to_key(ref)
     match = re.match(r"^(\d{4})Q(\d+)$", ref_str)
     if not match:
         raise ValueError(f"Expected quarterly RefPeriod in format YYYYQN, got {ref_str}")
@@ -102,11 +112,12 @@ def get_target_asof_ref(
         raise NotImplementedError(
             f"Adapter '{adapter_name}' does not support ref-period snapshots"
         )
+    ref_key = _refperiod_to_key(ref)
     observations = adapter.fetch_asof_ref(
         series_id_or_key,
         asof_date,
-        start_ref=ref,
-        end_ref=ref,
+        start_ref=ref_key,
+        end_ref=ref_key,
         freq=freq,
         metadata=metadata,
     )

@@ -28,6 +28,7 @@ def test_nan_value_latest_available_returns_none() -> None:
     assert value is None
     assert meta["selected_release_rank"] == 1
     assert meta["selected_release_asof_utc"] is None
+    assert meta["target_release_rank"] is None
 
 
 def test_invalid_max_release_rank_raises() -> None:

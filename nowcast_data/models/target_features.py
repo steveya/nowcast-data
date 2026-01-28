@@ -39,7 +39,17 @@ def get_quarterly_target_release_features(
     asof_date: date,
     spec: QuarterlyTargetFeatureSpec,
 ) -> tuple[dict[str, float], dict]:
-    """Construct release-derived target features for a quarterly reference."""
+    """Construct release-derived target features for a quarterly reference.
+
+    Feature keys include:
+      - {series_key}.rel{n}
+      - {series_key}.latest
+      - {series_key}.n_releases
+      - {series_key}.days_since_last
+      - {series_key}.rel2_minus_rel1
+      - {series_key}.rel3_minus_rel2
+      - {series_key}.latest_minus_rel1
+    """
     releases = list_quarterly_target_releases_asof(
         adapter,
         series_key=series_key,

@@ -197,10 +197,7 @@ def build_vintage_training_dataset(
     feature_rows: list[dict[str, float]] = []
     target_meta_by_ref: dict[str, dict] = {}
 
-    latest_policy = TargetPolicy(
-        mode="latest_available",
-        max_release_rank=config.final_target_policy.max_release_rank,
-    )
+    latest_policy = TargetPolicy(mode="latest_available")
 
     for ref_quarter in desired_index:
         releases = list_quarterly_target_releases_asof(
