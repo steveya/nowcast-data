@@ -95,6 +95,8 @@ class AlphaForgePITLayer:
         obs_date: date,
         asof_date: date,
     ) -> pd.DataFrame:
+        if self._ctx.pit is None:
+            raise ValueError("PIT store is not available; cannot list PIT observations.")
         conn = self._ctx.pit.conn
         obs_day = _normalize_utc_day(obs_date)
         asof_cutoff = _coerce_utc_timestamp(asof_date).normalize() + pd.Timedelta(days=1)
@@ -110,7 +112,14 @@ class AlphaForgePITLayer:
             [series_key, obs_day, asof_cutoff],
         ).fetchdf()
         if df.empty:
-            return pd.DataFrame(columns=["series_key", "obs_date", "asof_utc", "value"])
+            return pd.DataFrame(
+                {
+                    "series_key": pd.Series(dtype="object"),
+                    "obs_date": pd.Series(dtype="datetime64[ns, UTC]"),
+                    "asof_utc": pd.Series(dtype="datetime64[ns, UTC]"),
+                    "value": pd.Series(dtype="float64"),
+                }
+            )
 
         df["obs_date"] = pd.to_datetime(df["obs_date"], utc=True).dt.floor("D")
         df["asof_utc"] = pd.to_datetime(df["asof_utc"], utc=True)
