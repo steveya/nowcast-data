@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from inspect import signature
 from typing import Iterable
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import RidgeCV
+from sklearn.linear_model import LinearRegression, RidgeCV
 
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 from nowcast_data.pit.adapters.base import PITAdapter
 from nowcast_data.pit.api import PITDataManager
 from nowcast_data.pit.core.catalog import SeriesCatalog
@@ -31,11 +29,22 @@ class BridgeConfig:
     ingest_from_ctx_source: bool = False
 
 
+def _to_utc_naive(values):
+    parsed = pd.to_datetime(values, utc=True, errors="coerce")
+    if isinstance(parsed, pd.Series):
+        return parsed.dt.tz_convert("UTC").dt.tz_localize(None)
+    if isinstance(parsed, pd.DatetimeIndex):
+        return parsed.tz_convert("UTC").tz_localize(None)
+    if pd.isna(parsed):
+        return parsed
+    return parsed.tz_convert("UTC").tz_localize(None)
+
+
 def _to_quarter_period(ts: pd.Timestamp) -> pd.Period:
-    ts = pd.Timestamp(ts)
-    if ts.tzinfo is not None:
-        ts = ts.tz_convert("UTC").tz_localize(None)
-    return ts.to_period("Q")
+    ts = _to_utc_naive(ts)
+    if pd.isna(ts):
+        raise ValueError("obs_date is NaT")
+    return pd.Timestamp(ts).to_period("Q")
 
 
 def _agg_series(series: pd.Series, method: str) -> float:
@@ -92,15 +101,14 @@ def build_rt_quarterly_dataset(
     for series_key in series_keys:
         meta = metadata_by_key.get(series_key)
         # Always query PIT snapshots by canonical series_key; metadata controls source ingest.
-        fetch_params = signature(adapter.fetch_asof).parameters
-        if "ingest_from_ctx_source" in fetch_params:
+        try:
             observations = adapter.fetch_asof(
                 series_key,
                 asof_date,
                 metadata=meta,
                 ingest_from_ctx_source=ingest_from_ctx_source,
             )
-        else:
+        except TypeError:
             observations = adapter.fetch_asof(series_key, asof_date, metadata=meta)
         if not observations:
             raw_by_key[series_key] = pd.Series(dtype="float64")
@@ -111,17 +119,14 @@ def build_rt_quarterly_dataset(
                 "value": [obs.value for obs in observations],
             }
         )
-        data["obs_date"] = pd.to_datetime(data["obs_date"])
-        if (
-            meta is not None
-            and series_key in predictor_key_set
-            and str(meta.frequency).lower() == "m"
+        obs_dates_utc = pd.to_datetime(data["obs_date"], utc=True, errors="coerce")
+        if obs_dates_utc.isna().any():
+            raise ValueError(f"Series '{series_key}' has unparseable obs_date values.")
+        if series_key in predictor_key_set and (
+            (meta is not None and str(meta.frequency).lower() == "m")
+            or (meta is None and series_key in agg_spec)
         ):
-            obs_dates = pd.to_datetime(data["obs_date"], utc=True, errors="coerce").dt.tz_convert(None)
-            if obs_dates.isna().any():
-                raise ValueError(
-                    f"Monthly predictor series '{series_key}' has unparseable obs_date values."
-                )
+            obs_dates = _to_utc_naive(obs_dates_utc)
             non_month_end = obs_dates.loc[~obs_dates.dt.is_month_end]
             if not non_month_end.empty:
                 sample = non_month_end.dt.strftime("%Y-%m-%d").unique()[:3].tolist()
@@ -129,7 +134,8 @@ def build_rt_quarterly_dataset(
                     "Monthly predictor series "
                     f"'{series_key}' has non-month-end obs_date values: {sample}"
                 )
-        series = pd.Series(data["value"].to_numpy(), index=pd.DatetimeIndex(data["obs_date"]))
+        obs_dates_naive = _to_utc_naive(obs_dates_utc)
+        series = pd.Series(data["value"].to_numpy(), index=pd.DatetimeIndex(obs_dates_naive))
         raw_by_key[series_key] = series.sort_index()
 
     quarter_index = pd.Index(
@@ -207,7 +213,7 @@ class BridgeNowcaster:
     def __init__(
         self,
         config: BridgeConfig,
-        pit_manager_or_adapter: PITDataManager | AlphaForgePITAdapter,
+        pit_manager_or_adapter: PITDataManager | PITAdapter,
         catalog: SeriesCatalog | None = None,
     ) -> None:
         self.config = config
@@ -307,9 +313,18 @@ class BridgeNowcaster:
                 "nobs_current": nobs_current,
             }
 
-        model = RidgeCV(alphas=self.config.alphas)
-        model.fit(train_X.to_numpy(), train_y.to_numpy())
-        y_pred = float(model.predict(current_X.to_numpy().reshape(1, -1))[0])
+        if self.config.model == "ridge":
+            model = RidgeCV(alphas=self.config.alphas)
+            model.fit(train_X.to_numpy(), train_y.to_numpy())
+            y_pred = float(model.predict(current_X.to_numpy().reshape(1, -1))[0])
+            alpha_selected = float(model.alpha_)
+        elif self.config.model == "ols":
+            model = LinearRegression(fit_intercept=True)
+            model.fit(train_X.to_numpy(), train_y.to_numpy())
+            y_pred = float(model.predict(current_X.to_numpy().reshape(1, -1))[0])
+            alpha_selected = np.nan
+        else:
+            raise ValueError("model must be one of ['ridge', 'ols']")
 
         target_meta = self.catalog.get(self.config.target_series_key) if self.catalog else None
         y_true = get_target_asof_ref(
@@ -327,7 +342,7 @@ class BridgeNowcaster:
             "y_pred": y_pred,
             "n_train": len(train_y),
             "n_features": train_X.shape[1],
-            "alpha_selected": float(model.alpha_),
+            "alpha_selected": alpha_selected,
             "mean_months_observed": float(np.mean(list(nobs_current.values())))
             if nobs_current
             else np.nan,
