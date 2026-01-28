@@ -58,4 +58,5 @@ def test_max_release_rank_caps_next_release() -> None:
         releases, TargetPolicy(mode="next_release", max_release_rank=1)
     )
     assert value is None
-    assert meta["selected_release_rank"] == 1
+    assert meta["selected_release_rank"] is None
+    assert meta["target_release_rank"] == 1

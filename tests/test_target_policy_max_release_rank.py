@@ -10,7 +10,7 @@ from nowcast_data.models.target_policy import (
 from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 
 
-def test_next_release_returns_none(pit_context) -> None:
+def test_max_release_rank_caps_latest_available(pit_context) -> None:
     pit_context.pit.upsert_pit_observations(
         pd.DataFrame(
             [
@@ -26,6 +26,12 @@ def test_next_release_returns_none(pit_context) -> None:
                     "asof_utc": "2025-05-28",
                     "value": 1.2,
                 },
+                {
+                    "series_key": "GDPC1",
+                    "obs_date": "2025-03-31",
+                    "asof_utc": "2025-06-27",
+                    "value": 1.3,
+                },
             ]
         )
     )
@@ -35,9 +41,12 @@ def test_next_release_returns_none(pit_context) -> None:
         adapter,
         series_key="GDPC1",
         ref_quarter="2025Q1",
-        asof_date=date(2025, 6, 1),
+        asof_date=date(2025, 7, 1),
     )
-    value, meta = resolve_target_from_releases(releases, TargetPolicy(mode="next_release"))
-    assert value is None
-    assert meta["selected_release_rank"] is None
-    assert meta["target_release_rank"] == 3
+    value, meta = resolve_target_from_releases(
+        releases, TargetPolicy(mode="latest_available", max_release_rank=2)
+    )
+    assert value == 1.2
+    assert meta["selected_release_rank"] == 2
+    assert meta["n_releases_available"] == 2
+    assert meta["available_release_ranks"] == [1, 2]
