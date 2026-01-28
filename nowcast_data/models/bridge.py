@@ -29,12 +29,26 @@ class BridgeConfig:
     ingest_from_ctx_source: bool = False
 
 
-def _to_utc_naive(values):
-    parsed = pd.to_datetime(values, utc=True, errors="coerce")
+def _to_utc_naive(values: pd.Series | pd.DatetimeIndex | object) -> pd.Series | pd.DatetimeIndex | pd.Timestamp:
+    """Convert datetime-like values to UTC-naive timestamps."""
+    if isinstance(values, pd.Series) and pd.api.types.is_datetime64_any_dtype(values):
+        parsed = values
+    elif isinstance(values, pd.DatetimeIndex):
+        parsed = values
+    else:
+        parsed = pd.to_datetime(values, utc=True, errors="coerce")
     if isinstance(parsed, pd.Series):
-        return parsed.dt.tz_convert("UTC").dt.tz_localize(None)
+        if parsed.dt.tz is None:
+            parsed = parsed.dt.tz_localize("UTC")
+        else:
+            parsed = parsed.dt.tz_convert("UTC")
+        return parsed.dt.tz_localize(None)
     if isinstance(parsed, pd.DatetimeIndex):
-        return parsed.tz_convert("UTC").tz_localize(None)
+        if parsed.tz is None:
+            parsed = parsed.tz_localize("UTC")
+        else:
+            parsed = parsed.tz_convert("UTC")
+        return parsed.tz_localize(None)
     if pd.isna(parsed):
         return parsed
     return parsed.tz_convert("UTC").tz_localize(None)
@@ -43,7 +57,7 @@ def _to_utc_naive(values):
 def _to_quarter_period(ts: pd.Timestamp) -> pd.Period:
     ts = _to_utc_naive(ts)
     if pd.isna(ts):
-        raise ValueError("obs_date is NaT")
+        raise ValueError("Invalid or missing observation date")
     return pd.Timestamp(ts).to_period("Q")
 
 
@@ -122,19 +136,19 @@ def build_rt_quarterly_dataset(
         obs_dates_utc = pd.to_datetime(data["obs_date"], utc=True, errors="coerce")
         if obs_dates_utc.isna().any():
             raise ValueError(f"Series '{series_key}' has unparseable obs_date values.")
+        obs_dates_naive = _to_utc_naive(obs_dates_utc)
         if series_key in predictor_key_set and (
             (meta is not None and str(meta.frequency).lower() == "m")
             or (meta is None and series_key in agg_spec)
         ):
-            obs_dates = _to_utc_naive(obs_dates_utc)
-            non_month_end = obs_dates.loc[~obs_dates.dt.is_month_end]
+            # Heuristic: predictors in agg_spec are treated as monthly unless metadata says otherwise.
+            non_month_end = obs_dates_naive.loc[~obs_dates_naive.dt.is_month_end]
             if not non_month_end.empty:
                 sample = non_month_end.dt.strftime("%Y-%m-%d").unique()[:3].tolist()
                 raise ValueError(
                     "Monthly predictor series "
                     f"'{series_key}' has non-month-end obs_date values: {sample}"
                 )
-        obs_dates_naive = _to_utc_naive(obs_dates_utc)
         series = pd.Series(data["value"].to_numpy(), index=pd.DatetimeIndex(obs_dates_naive))
         raw_by_key[series_key] = series.sort_index()
 
@@ -207,8 +221,8 @@ def build_rt_quarterly_dataset(
 class BridgeNowcaster:
     """Baseline bridge nowcasting model using quarterly aggregates.
 
-    Fits a ridge regression on historical quarters and predicts GDP for the
-    current quarter inferred from the as-of date.
+    Fits a regression on historical quarters and predicts GDP for the current
+    quarter inferred from the as-of date.
     """
     def __init__(
         self,
@@ -324,7 +338,7 @@ class BridgeNowcaster:
             y_pred = float(model.predict(current_X.to_numpy().reshape(1, -1))[0])
             alpha_selected = np.nan
         else:
-            raise ValueError("model must be one of ['ridge', 'ols']")
+            raise ValueError("model must be 'ridge' or 'ols'")
 
         target_meta = self.catalog.get(self.config.target_series_key) if self.catalog else None
         y_true = get_target_asof_ref(
