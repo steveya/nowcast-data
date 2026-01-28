@@ -18,7 +18,18 @@ class TargetPolicy:
 
 
 def quarter_end_date(ref_quarter: str | pd.Period) -> date:
-    """Return the quarter-end date for a reference quarter."""
+    """Return the quarter-end date for a reference quarter.
+
+    Args:
+        ref_quarter: Quarterly reference in ``YYYYQn`` format or a pandas Period
+            (e.g., ``"2025Q1"``, ``pd.Period("2025Q1", freq="Q")``).
+
+    Returns:
+        The calendar quarter-end date.
+
+    Raises:
+        ValueError: If the reference quarter does not match ``YYYYQn``.
+    """
     ref_str = str(ref_quarter)
     match = re.match(r"^(\d{4})Q([1-4])$", ref_str)
     if not match:
@@ -41,7 +52,18 @@ def list_quarterly_target_releases_asof(
     ref_quarter: str | pd.Period,
     asof_date: date,
 ) -> pd.DataFrame:
-    """List available quarterly releases up to an as-of date."""
+    """List available quarterly releases up to an as-of date.
+
+    Args:
+        adapter: PIT adapter that supports ``list_pit_observations_asof``.
+        series_key: PIT series key for the target series.
+        ref_quarter: Quarterly reference in ``YYYYQn`` format or a pandas Period.
+        asof_date: Vintage cut-off date (treated as end-of-day UTC).
+
+    Returns:
+        DataFrame sorted by ``asof_utc`` (ascending) with columns:
+        ``obs_date`` (quarter end), ``asof_utc`` (release timestamp), and ``value``.
+    """
     obs_date = quarter_end_date(ref_quarter)
     releases = adapter.list_pit_observations_asof(
         series_key=series_key,
@@ -56,7 +78,21 @@ def resolve_target_from_releases(
     releases: pd.DataFrame,
     policy: TargetPolicy,
 ) -> tuple[float | None, dict]:
-    """Resolve a target value from available releases."""
+    """Resolve a target value from available releases.
+
+    Args:
+        releases: DataFrame containing ``obs_date``, ``asof_utc``, and ``value`` columns.
+        policy: Target policy configuration.
+
+    Returns:
+        Tuple of (value, metadata). ``value`` is ``None`` if the policy cannot select
+        a release. Metadata includes:
+        ``policy_mode``, ``selected_release_rank``, ``selected_release_asof_utc``,
+        ``available_release_ranks``, ``n_releases_available``, and ``obs_date``.
+
+    Raises:
+        ValueError: If the policy configuration is invalid.
+    """
     releases_sorted = releases.sort_values("asof_utc", kind="mergesort").reset_index(drop=True)
     if policy.max_release_rank is not None:
         if policy.max_release_rank < 1:
@@ -84,8 +120,8 @@ def resolve_target_from_releases(
             raise ValueError("TargetPolicy.nth must be set for nth_release mode")
         if policy.nth < 1:
             raise ValueError("TargetPolicy.nth must be >= 1")
+        selected_rank = policy.nth
         if policy.nth <= k:
-            selected_rank = policy.nth
             row = releases_sorted.iloc[selected_rank - 1]
             row_value = row["value"]
             value = float(row_value) if pd.notna(row_value) else None
