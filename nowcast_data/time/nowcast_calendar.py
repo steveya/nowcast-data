@@ -104,6 +104,7 @@ def get_target_asof_ref(
 
     Returns:
         The target value for the ref period at the given vintage, or None if missing.
+        When the fallback listing API is unavailable, returns None instead.
 
     Raises:
         NotImplementedError: If the adapter does not support ref-period snapshots.
@@ -133,11 +134,14 @@ def get_target_asof_ref(
         return observations[0].value
     obs_date = _refperiod_to_obs_date(ref)
     series_key = metadata.series_key if metadata is not None else series_id_or_key
-    fallback = adapter.list_pit_observations_asof(
-        series_key=series_key,
-        obs_date=obs_date,
-        asof_date=asof_date,
-    )
+    try:
+        fallback = adapter.list_pit_observations_asof(
+            series_key=series_key,
+            obs_date=obs_date,
+            asof_date=asof_date,
+        )
+    except NotImplementedError:
+        return None
     if fallback.empty:
         return None
     return float(fallback.iloc[-1]["value"])

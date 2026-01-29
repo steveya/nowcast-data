@@ -149,11 +149,7 @@ def build_rt_quarterly_dataset(
         if obs_dates_utc.isna().any():
             raise ValueError(f"Series '{series_key}' has unparseable obs_date values.")
         obs_dates_naive = _to_utc_naive(obs_dates_utc)
-        if series_key in predictor_key_set and (
-            (meta is not None and str(meta.frequency).lower() == "m")
-            or (meta is None and series_key in agg_spec)
-        ):
-            # Heuristic: predictors in agg_spec are treated as monthly unless metadata says otherwise.
+        if series_key in predictor_key_set and meta is not None and str(meta.frequency).lower() == "m":
             non_month_end = obs_dates_naive.loc[~obs_dates_naive.dt.is_month_end]
             if not non_month_end.empty:
                 sample = non_month_end.dt.strftime("%Y-%m-%d").unique()[:3].tolist()

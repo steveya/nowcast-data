@@ -107,7 +107,7 @@ def _build_predictor_frame(
         if obs_dates_utc.isna().any():
             raise ValueError(f"Series '{series_key}' has unparseable obs_date values.")
         obs_dates_naive = _to_utc_naive(obs_dates_utc)
-        if (meta is not None and str(meta.frequency).lower() == "m") or series_key in agg_spec:
+        if meta is not None and str(meta.frequency).lower() == "m":
             non_month_end = obs_dates_naive.loc[~obs_dates_naive.dt.is_month_end]
             if not non_month_end.empty:
                 sample = non_month_end.dt.strftime("%Y-%m-%d").unique()[:3].tolist()
