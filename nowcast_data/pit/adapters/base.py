@@ -130,3 +130,23 @@ class PITAdapter(ABC):
             List of PIT observations
         """
         return self.fetch_asof(series_id, vintage_date, start, end)
+
+    def list_pit_observations_asof(
+        self,
+        *,
+        series_key: str,
+        obs_date: date,
+        asof_date: date,
+    ) -> pd.DataFrame:
+        """
+        List all PIT observations for a series/obs_date up to an as-of date.
+
+        Args:
+            series_key: PIT series key stored in the PIT observations table.
+            obs_date: Observation date to filter on.
+            asof_date: As-of date treated as end-of-day UTC.
+
+        Returns:
+            DataFrame with columns: series_key, obs_date, asof_utc, value
+        """
+        raise NotImplementedError("PIT observation listing not supported.")

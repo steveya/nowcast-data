@@ -11,7 +11,7 @@ from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 def test_snapshot_ref_ranges(pit_context) -> None:
     adapter = AlphaForgePITAdapter(ctx=pit_context)
     snap = adapter.fetch_asof_ref(
-        series_id="GDP",
+        series_id="BASE_GDP",
         asof_date=date(2025, 5, 15),
         start_ref="2024Q4",
         end_ref="2025Q1",
@@ -30,7 +30,7 @@ def test_snapshot_ref_normalizes_non_midnight_timestamps(pit_context, monkeypatc
     monkeypatch.setattr(adapter._layer, "snapshot_ref", lambda *args, **kwargs: fake_snap)
 
     snap = adapter.fetch_asof_ref(
-        series_id="GDP",
+        series_id="BASE_GDP",
         asof_date=date(2025, 5, 15),
         start_ref="2024Q4",
         end_ref="2025Q1",
@@ -43,6 +43,6 @@ def test_snapshot_ref_normalizes_non_midnight_timestamps(pit_context, monkeypatc
 
 def test_revisions_ref_matches_obs_date(pit_context) -> None:
     adapter = AlphaForgePITAdapter(ctx=pit_context)
-    revs = adapter.fetch_revisions_ref("GDP", "2024Q4", freq=RefFreq.Q)
+    revs = adapter.fetch_revisions_ref("BASE_GDP", "2024Q4", freq=RefFreq.Q)
     assert isinstance(revs, pd.Series)
     assert list(revs.values) == [1.0, 1.1]

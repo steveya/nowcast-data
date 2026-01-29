@@ -14,19 +14,19 @@ def test_bridge_nowcaster_ols_smoke(pit_context) -> None:
 
     pit_rows = [
         {
-            "series_key": "GDP",
+            "series_key": "BASE_GDP",
             "obs_date": "2024-09-30",
             "asof_utc": "2024-11-10",
             "value": 0.8,
         },
         {
-            "series_key": "GDP",
+            "series_key": "BASE_GDP",
             "obs_date": "2024-12-31",
             "asof_utc": "2025-02-10",
             "value": 1.0,
         },
         {
-            "series_key": "GDP",
+            "series_key": "BASE_GDP",
             "obs_date": "2025-03-31",
             "asof_utc": "2025-05-01",
             "value": 1.2,
@@ -56,7 +56,7 @@ def test_bridge_nowcaster_ols_smoke(pit_context) -> None:
     pit_context.pit.upsert_pit_observations(pd.DataFrame(pit_rows))
 
     config = BridgeConfig(
-        target_series_key="GDP",
+        target_series_key="BASE_GDP",
         predictor_series_keys=["P1", "P2"],
         agg_spec={"P1": "mean", "P2": "mean"},
         min_train_quarters=2,
