@@ -56,4 +56,5 @@ def test_bridge_builder_no_leakage(pit_context) -> None:
     )
 
     current_quarter = pd.Period("2025Q2", freq="Q")
-    assert dataset.loc[current_quarter, "P1"] == 101.0
+    # 2025-05-31 is after asof_date (2025-05-15) and should not be included.
+    assert dataset.loc[current_quarter, "P1"] == 100.0

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-import re
 from typing import Literal
 
 import pandas as pd
 
+from nowcast_data.time.nowcast_calendar import refperiod_to_quarter_end
 from nowcast_data.pit.adapters.base import PITAdapter
 
 
@@ -30,19 +30,7 @@ def quarter_end_date(ref_quarter: str | pd.Period) -> date:
     Raises:
         ValueError: If the reference quarter does not match ``YYYYQn``.
     """
-    ref_str = str(ref_quarter)
-    match = re.match(r"^(\d{4})Q([1-4])$", ref_str)
-    if not match:
-        raise ValueError(f"Expected ref quarter in format YYYYQn, got {ref_str}")
-    year = int(match.group(1))
-    quarter = int(match.group(2))
-    if quarter == 1:
-        return date(year, 3, 31)
-    if quarter == 2:
-        return date(year, 6, 30)
-    if quarter == 3:
-        return date(year, 9, 30)
-    return date(year, 12, 31)
+    return refperiod_to_quarter_end(ref_quarter)
 
 
 def list_quarterly_target_releases_asof(
@@ -215,4 +203,6 @@ def get_quarterly_release_observation_stream(
     stream.insert(0, "series_key", series_key)
     stream.insert(1, "ref_quarter", str(ref_quarter))
     stream.insert(3, "release_rank", release_rank)
-    return stream.loc[:, ["series_key", "ref_quarter", "obs_date", "release_rank", "asof_utc", "value"]]
+    return stream.loc[
+        :, ["series_key", "ref_quarter", "obs_date", "release_rank", "asof_utc", "value"]
+    ]

@@ -39,10 +39,67 @@ def main() -> None:
         ingest_from_ctx_source=True,
     )
 
-    print("Vintage training dataset:")
+    print("=" * 80)
+    print("VINTAGE TRAINING DATASET")
+    print("=" * 80)
+    print(f"\nAsof date (vintage): {asof_date}")
+    print(f"Evaluation asof date (for final target): {evaluation_asof_date}")
+    print(f"\nDataset shape: {dataset.shape}")
+    print(f"\nTarget series key: {config.target_series_key}")
+    print(f"Reference quarter offsets: {config.ref_offsets}")
+    print(f"Includes target release features: {config.target_feature_spec is not None}")
+
+    print("\n" + "-" * 80)
+    print("FULL DATASET (all columns)")
+    print("-" * 80)
     print(dataset)
-    print("\nMetadata:")
-    print(meta)
+
+    print("\n" + "-" * 80)
+    print("TARGET LABEL COMPARISON: y_asof_latest vs y_final")
+    print("-" * 80)
+    label_cols = ["y_asof_latest", "y_final"]
+    if all(col in dataset.columns for col in label_cols):
+        label_df = dataset[label_cols].copy()
+        label_df["difference"] = label_df["y_final"] - label_df["y_asof_latest"]
+        print(label_df)
+        print(f"\nMean difference (y_final - y_asof_latest): {label_df['difference'].mean():.4f}")
+
+    print("\n" + "-" * 80)
+    print("SAMPLE COLUMNS (ref_offsets -1, 0, 1)")
+    print("-" * 80)
+    display_cols = ["y_asof_latest", "y_final"] + [
+        col
+        for col in dataset.columns
+        if col not in ["y_asof_latest", "y_final"]
+        and not col.startswith(f"{config.target_series_key}.")
+    ][:3]
+    display_cols = [col for col in display_cols if col in dataset.columns]
+    print(dataset[display_cols])
+
+    if any(
+        col.startswith(f"{config.target_series_key}.") and col not in ["y_asof_latest", "y_final"]
+        for col in dataset.columns
+    ):
+        print("\n" + "-" * 80)
+        print("TARGET RELEASE FEATURES")
+        print("-" * 80)
+        trf_cols = [
+            col
+            for col in dataset.columns
+            if col.startswith(f"{config.target_series_key}.")
+            and col not in ["y_asof_latest", "y_final"]
+        ]
+        print(f"Number of target release features: {len(trf_cols)}")
+        print(f"Feature names: {trf_cols[:5]}{'...' if len(trf_cols) > 5 else ''}")
+        print(f"\nSample feature values:")
+        print(dataset[trf_cols[:3]])
+
+    print("\n" + "-" * 80)
+    print("METADATA")
+    print("-" * 80)
+    print(f"\nCurrent reference quarter: {meta['current_ref_quarter']}")
+    print(f"Observations in current quarter: {meta['nobs_current']}")
+    print(f"Last observation dates (current quarter): {meta['last_obs_date_current_quarter']}")
 
 
 if __name__ == "__main__":

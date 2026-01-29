@@ -7,7 +7,13 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
-from nowcast_data.models.bridge import _agg_series, _to_quarter_period, _to_utc_naive
+from nowcast_data.models.utils import (
+    agg_series,
+    apply_quarter_cutoff,
+    expand_daily_series_to_frame,
+    to_quarter_period,
+    to_utc_naive,
+)
 from nowcast_data.models.target_features import (
     QuarterlyTargetFeatureSpec,
     get_quarterly_target_release_features,
@@ -85,6 +91,7 @@ def _build_predictor_frame(
                 metadata_by_key[key] = meta
 
     raw_by_key: dict[str, pd.Series] = {}
+    current_quarter = pd.Period(pd.Timestamp(asof_date), freq="Q")
     for series_key in predictor_series_keys:
         meta = metadata_by_key.get(series_key)
         observations = _fetch_asof_series(
@@ -106,7 +113,7 @@ def _build_predictor_frame(
         obs_dates_utc = pd.to_datetime(data["obs_date"], utc=True, errors="coerce")
         if obs_dates_utc.isna().any():
             raise ValueError(f"Series '{series_key}' has unparseable obs_date values.")
-        obs_dates_naive = _to_utc_naive(obs_dates_utc)
+        obs_dates_naive = to_utc_naive(obs_dates_utc)
         if meta is not None and str(meta.frequency).lower() == "m":
             non_month_end = obs_dates_naive.loc[~obs_dates_naive.dt.is_month_end]
             if not non_month_end.empty:
@@ -116,16 +123,17 @@ def _build_predictor_frame(
                     f"'{series_key}' has non-month-end obs_date values: {sample}"
                 )
         series = pd.Series(data["value"].to_numpy(), index=pd.DatetimeIndex(obs_dates_naive))
-        raw_by_key[series_key] = series.sort_index()
+        series = series.sort_index()
+        series = apply_quarter_cutoff(
+            series,
+            asof_date=asof_date,
+            include_partial_quarters=include_partial_quarters,
+            current_quarter=current_quarter,
+        )
+        raw_by_key[series_key] = series
 
     quarter_index = pd.Index(
-        sorted(
-            {
-                _to_quarter_period(ts)
-                for series in raw_by_key.values()
-                for ts in series.index
-            }
-        ),
+        sorted({to_quarter_period(ts) for series in raw_by_key.values() for ts in series.index}),
         name="ref_quarter",
     )
 
@@ -146,17 +154,41 @@ def _build_predictor_frame(
     last_obs_date_current_quarter: dict[str, date | None] = {}
     for series_key in predictor_series_keys:
         series = raw_by_key.get(series_key, pd.Series(dtype="float64"))
+        meta = metadata_by_key.get(series_key)
+        frequency = str(meta.frequency).lower() if meta is not None else ""
+
         if series.empty:
-            predictor_frame[series_key] = np.nan
+            if frequency in {"d", "b"}:
+                empty_daily = expand_daily_series_to_frame(
+                    series,
+                    series_key=series_key,
+                    quarter_index=quarter_index,
+                )
+                predictor_frame = predictor_frame.join(empty_daily)
+            else:
+                predictor_frame[series_key] = np.nan
             nobs_current[series_key] = 0
             last_obs_date_current_quarter[series_key] = None
             continue
+
         series = series.sort_index()
-        grouped = series.groupby(series.index.map(_to_quarter_period))
-        agg_method = agg_spec.get(series_key, "mean").lower()
-        predictor_frame[series_key] = grouped.apply(lambda values: _agg_series(values, agg_method))
-        predictor_frame[series_key] = predictor_frame[series_key].reindex(quarter_index)
-        current_series = series.loc[series.index.map(_to_quarter_period) == current_quarter]
+
+        if frequency in {"d", "b"}:
+            daily_frame = expand_daily_series_to_frame(
+                series,
+                series_key=series_key,
+                quarter_index=quarter_index,
+            )
+            predictor_frame = predictor_frame.join(daily_frame)
+        else:
+            grouped = series.groupby(series.index.map(to_quarter_period))
+            agg_method = agg_spec.get(series_key, "mean").lower()
+            predictor_frame[series_key] = grouped.apply(
+                lambda values: agg_series(values, agg_method)
+            )
+            predictor_frame[series_key] = predictor_frame[series_key].reindex(quarter_index)
+
+        current_series = series.loc[series.index.map(to_quarter_period) == current_quarter]
         nobs_current[series_key] = int(current_series.notna().sum())
         last_obs_date_current_quarter[series_key] = (
             pd.Timestamp(current_series.index.max()).date() if not current_series.empty else None
