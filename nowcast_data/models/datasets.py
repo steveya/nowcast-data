@@ -13,6 +13,7 @@ from nowcast_data.models.utils import (
     expand_daily_series_to_frame,
     to_quarter_period,
     to_utc_naive,
+    validate_monthly_obs_dates,
 )
 from nowcast_data.models.target_features import (
     QuarterlyTargetFeatureSpec,
@@ -115,13 +116,11 @@ def _build_predictor_frame(
             raise ValueError(f"Series '{series_key}' has unparseable obs_date values.")
         obs_dates_naive = to_utc_naive(obs_dates_utc)
         if meta is not None and str(meta.frequency).lower() == "m":
-            non_month_end = obs_dates_naive.loc[~obs_dates_naive.dt.is_month_end]
-            if not non_month_end.empty:
-                sample = non_month_end.dt.strftime("%Y-%m-%d").unique()[:3].tolist()
-                raise ValueError(
-                    "Monthly predictor series "
-                    f"'{series_key}' has non-month-end obs_date values: {sample}"
-                )
+            validate_monthly_obs_dates(
+                obs_dates_naive,
+                series_key=series_key,
+                obs_date_anchor=meta.obs_date_anchor,
+            )
         series = pd.Series(data["value"].to_numpy(), index=pd.DatetimeIndex(obs_dates_naive))
         series = series.sort_index()
         series = apply_quarter_cutoff(

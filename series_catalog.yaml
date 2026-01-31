@@ -18,6 +18,7 @@ US_CPI:
   source: FRED_ALFRED
   source_series_id: CPIAUCSL
   frequency: M
+  obs_date_anchor: start
   seasonal_adjustment: SA
   units: Index 1982-1984=100
   description: Consumer Price Index for All Urban Consumers - All Items
@@ -28,6 +29,7 @@ US_UNRATE:
   source: FRED_ALFRED
   source_series_id: UNRATE
   frequency: M
+  obs_date_anchor: start
   seasonal_adjustment: SA
   units: Percent
   description: Unemployment Rate

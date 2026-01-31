@@ -56,6 +56,45 @@ def agg_series(series: pd.Series, method: str) -> float:
     return float(series.mean())
 
 
+def validate_monthly_obs_dates(
+    obs_dates_naive: pd.Series | pd.DatetimeIndex,
+    *,
+    series_key: str,
+    obs_date_anchor: str | None,
+) -> None:
+    """Validate monthly obs_date alignment based on anchor convention.
+
+    Args:
+        obs_dates_naive: UTC-naive observation dates.
+        series_key: Series key used for error messages.
+        obs_date_anchor: "start", "end", or None.
+
+    Raises:
+        ValueError: If any obs_date values are not aligned to the allowed anchors.
+    """
+    dates_index = pd.DatetimeIndex(obs_dates_naive)
+    is_month_start = dates_index.is_month_start
+    is_month_end = dates_index.is_month_end
+
+    if obs_date_anchor == "start":
+        allowed = is_month_start
+        rule = "month-start"
+    elif obs_date_anchor == "end":
+        allowed = is_month_end
+        rule = "month-end"
+    else:
+        allowed = is_month_start | is_month_end
+        rule = "month-start or month-end"
+
+    invalid = ~allowed
+    if invalid.any():
+        sample = pd.Index(dates_index[invalid]).strftime("%Y-%m-%d").unique().tolist()[:3]
+        raise ValueError(
+            f"Monthly predictor series '{series_key}' has obs_date values not aligned "
+            f"to {rule}: {sample}"
+        )
+
+
 def apply_quarter_cutoff(
     series: pd.Series,
     *,

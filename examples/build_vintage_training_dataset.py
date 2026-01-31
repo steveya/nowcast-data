@@ -2,15 +2,68 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from typing import Iterable
 
-from nowcast_data.models.datasets import (
-    VintageTrainingDatasetConfig,
-    build_vintage_training_dataset,
-)
+import pandas as pd
+
+from nowcast_data.models.datasets import VintageTrainingDatasetConfig
+from nowcast_data.models.panel import build_vintage_panel_dataset
 from nowcast_data.models.target_features import QuarterlyTargetFeatureSpec
 from nowcast_data.models.target_policy import TargetPolicy
 from nowcast_data.pit.api import PITDataManager
 from nowcast_data.pit.core.catalog import SeriesCatalog
+
+
+def _collect_event_dates(
+    manager: PITDataManager,
+    series_keys: Iterable[str],
+    *,
+    asof_start: date,
+    asof_end: date,
+) -> list[date]:
+    if "alphaforge" not in manager.adapters:
+        raise ValueError("alphaforge adapter is required to list vintages")
+
+    adapter = manager.adapters["alphaforge"]
+    event_dates: set[date] = set()
+    for series_key in series_keys:
+        try:
+            vintages = adapter.list_vintages(series_key)
+        except Exception as exc:
+            print(f"Warning: failed to list vintages for {series_key}: {exc}")
+            continue
+        for v in vintages:
+            if asof_start <= v <= asof_end:
+                event_dates.add(v)
+    return sorted(event_dates)
+
+
+def _expand_to_daily_grid(
+    event_df: pd.DataFrame,
+    *,
+    asof_start: date,
+    asof_end: date,
+) -> pd.DataFrame:
+    daily_index = pd.bdate_range(start=asof_start, end=asof_end).date
+    event_dates = pd.Index(event_df.index)
+    daily = event_df.reindex(daily_index).ffill()
+    daily["is_event_date"] = daily.index.isin(event_dates)
+
+    event_id = pd.Series(index=daily.index, dtype="float64")
+    event_id.loc[daily["is_event_date"]] = range(1, int(daily["is_event_date"].sum()) + 1)
+    event_id = event_id.ffill().fillna(0).astype(int)
+    daily["event_id"] = event_id
+
+    last_event_date = pd.Series(index=daily.index, dtype="datetime64[ns]")
+    last_event_date.loc[daily["is_event_date"]] = pd.to_datetime(daily.index)
+    last_event_date = last_event_date.ffill()
+    daily["since_event_days"] = (
+        (pd.to_datetime(daily.index) - last_event_date).dt.days.fillna(0).astype(int)
+    )
+
+    block_sizes = daily.groupby("event_id").size()
+    daily["sample_weight"] = daily["event_id"].map(block_sizes).rdiv(1.0)
+    return daily
 
 
 def main() -> None:
@@ -18,7 +71,9 @@ def main() -> None:
     catalog = SeriesCatalog(catalog_path)
     manager = PITDataManager(catalog)
 
-    asof_date = date(2025, 5, 15)
+    asof_start = date(2025, 1, 1)
+    asof_end = date(2025, 7, 15)
+    grid_mode = "event"  # "event" or "daily"
     evaluation_asof_date = date(2025, 7, 15)
 
     config = VintageTrainingDatasetConfig(
@@ -31,20 +86,58 @@ def main() -> None:
         target_feature_spec=QuarterlyTargetFeatureSpec(),
     )
 
-    dataset, meta = build_vintage_training_dataset(
+    series_keys = [config.target_series_key, *config.predictor_series_keys]
+    event_dates = _collect_event_dates(
+        manager,
+        series_keys,
+        asof_start=asof_start,
+        asof_end=asof_end,
+    )
+    if not event_dates:
+        raise ValueError("No event dates found in the requested window")
+
+    dataset, meta = build_vintage_panel_dataset(
         manager.adapters["alphaforge"],
         catalog,
         config=config,
-        asof_date=asof_date,
+        vintages=event_dates,
         ingest_from_ctx_source=True,
     )
+
+    dropped = 0
+    if "y_asof_latest" in dataset.columns:
+        non_null_mask = dataset["y_asof_latest"].notna()
+        if non_null_mask.sum() == 0:
+            print(
+                "Warning: y_asof_latest is NaN for all event dates; "
+                "dropping rows with NaN targets."
+            )
+        dropped = int((~non_null_mask).sum())
+        dataset = dataset.loc[non_null_mask]
+
+    if grid_mode == "daily":
+        dataset = _expand_to_daily_grid(
+            dataset,
+            asof_start=asof_start,
+            asof_end=asof_end,
+        )
 
     print("=" * 80)
     print("VINTAGE TRAINING DATASET")
     print("=" * 80)
-    print(f"\nAsof date (vintage): {asof_date}")
+    print(f"\nAs-of window: {asof_start} to {asof_end}")
+    print(f"Grid mode: {grid_mode}")
     print(f"Evaluation asof date (for final target): {evaluation_asof_date}")
     print(f"\nDataset shape: {dataset.shape}")
+    print(f"Event rows: {len(event_dates)}")
+    if grid_mode == "daily":
+        print(f"Daily rows: {len(dataset)}")
+        print(
+            "Warning: daily rows are forward-filled; do not treat as independent samples. "
+            "Use is_event_date or sample_weight."
+        )
+    if dropped > 0:
+        print(f"Dropped {dropped} rows with NaN targets")
     print(f"\nTarget series key: {config.target_series_key}")
     print(f"Reference quarter offsets: {config.ref_offsets}")
     print(f"Includes target release features: {config.target_feature_spec is not None}")
@@ -97,9 +190,11 @@ def main() -> None:
     print("\n" + "-" * 80)
     print("METADATA")
     print("-" * 80)
-    print(f"\nCurrent reference quarter: {meta['current_ref_quarter']}")
-    print(f"Observations in current quarter: {meta['nobs_current']}")
-    print(f"Last observation dates (current quarter): {meta['last_obs_date_current_quarter']}")
+    if not meta.empty:
+        meta_row = meta.iloc[-1]
+        print(f"\nCurrent reference quarter: {meta_row['current_ref_quarter']}")
+        print(f"Observations in current quarter: {meta_row['nobs_current_json']}")
+        print("Last observation dates (current quarter): " f"{meta_row['last_obs_date_json']}")
 
 
 if __name__ == "__main__":
