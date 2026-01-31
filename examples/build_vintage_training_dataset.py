@@ -26,8 +26,17 @@ from typing import Iterable
 
 import numpy as np
 import pandas as pd
+from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression, RidgeCV
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
+from nowcast_data.features import (
+    MissingnessFilter,
+    QuarterlyFeatureBuilder,
+    build_agg_spec_from_recipes,
+    compute_gdp_qoq_saar,
+)
 from nowcast_data.models.datasets import (
     VintageTrainingDatasetConfig,
     build_vintage_training_dataset,
@@ -150,8 +159,6 @@ def _series_key_map(series_keys: list[str]) -> dict[str, str]:
     return {key: key.upper() for key in series_keys}
 
 
-# -------------------- Transform helpers --------------------
-
 def _collect_meta_table(meta_csv: Path) -> pd.DataFrame:
     df = pd.read_csv(meta_csv)
     df.columns = [c.strip().lower() for c in df.columns]
@@ -161,199 +168,55 @@ def _collect_meta_table(meta_csv: Path) -> pd.DataFrame:
     return df
 
 
-def _collect_transform_map(meta_csv: Path) -> dict[str, str]:
-    """Return per-series transform string from meta_data.csv.
-
-    The repo's meta_data.csv may include a transform column. We support a few common
-    column names; if none are present, defaults to 'level' for all series.
-    """
-    df = _collect_meta_table(meta_csv)
-    transform_cols = [
-        c
-        for c in [
-            "transform",
-            "transformation",
-            "xform",
-            "stationarity_transform",
-            "stationary_transform",
-        ]
-        if c in df.columns
+def make_pipeline(model: str, predictor_keys: list[str], alphas: list[float]) -> Pipeline:
+    steps = [
+        ("feat", QuarterlyFeatureBuilder(predictor_keys=predictor_keys)),
+        ("miss", MissingnessFilter(max_nan_frac=0.5)),
+        ("impute", SimpleImputer(strategy="mean")),
+        ("scale", StandardScaler(with_mean=True, with_std=True)),
     ]
-    if not transform_cols:
-        return {s: "level" for s in df["series"].tolist() if s}
-    col = transform_cols[0]
-    out: dict[str, str] = {}
-    for _, r in df.iterrows():
-        s = str(r.get("series", "")).strip().lower()
-        if not s:
-            continue
-        t = str(r.get(col, "level") or "level").strip().lower()
-        out[s] = t if t else "level"
-    return out
+    if model == "ridge":
+        steps.append(("model", RidgeCV(alphas=alphas)))
+    elif model == "ols":
+        steps.append(("model", LinearRegression(fit_intercept=True)))
+    else:
+        raise ValueError(f"Unknown model: {model}")
+    return Pipeline(steps)
 
 
-def _annualization_factor(freq: str) -> float:
-    f = (freq or "").lower()
-    if f == "q":
-        return 400.0
-    if f == "m":
-        return 1200.0
-    if f in {"w", "d", "b"}:
-        # not well-defined; treat as monthly-ish default
-        return 1200.0
-    return 400.0
-
-
-def _apply_transform_series(s: pd.Series, transform: str, *, freq: str) -> pd.Series:
-    """Apply a simple stationarizing transform to a 1D time series.
-
-    This is applied within each vintage (asof_date) across ref_quarter ordering.
-    """
-    t = (transform or "level").strip().lower()
-    if t in {"", "none", "level", "levels"}:
-        return s
-    if t in {"log"}:
-        return np.log(s)
-    if t in {"diff", "delta"}:
-        return s.diff(1)
-    if t in {"log_diff", "dlog", "diff_log"}:
-        return np.log(s).diff(1)
-    if t in {"pct", "pct_change", "percent_change"}:
-        return s.pct_change(1) * 100.0
-    if t in {"yoy", "year_over_year"}:
-        lag = 4 if (freq or "").lower() == "q" else 12
-        return s.pct_change(lag) * 100.0
-    if t in {"log_yoy", "dlog_yoy"}:
-        lag = 4 if (freq or "").lower() == "q" else 12
-        return np.log(s).diff(lag) * 100.0
-    if t in {"qoq_saar", "logdiff_saar", "log_diff_saar", "log_diff_ann", "dlog_saar"}:
-        # annualized log difference
-        a = _annualization_factor(freq)
-        return np.log(s).diff(1) * a
-    # Unknown transform: fall back to level
-    return s
-
-
-def _transform_panel_inplace(
-    panel: pd.DataFrame,
-    *,
-    meta_df: pd.DataFrame,
-    transform_map: dict[str, str],
-    catalog: SeriesCatalog,
-    series_key_map: dict[str, str],
-    predictor_keys: list[str],
-    target_key: str,
-) -> pd.DataFrame:
-    """Create *_level columns and overwrite series columns with transformed values.
-
-    The transform is applied per asof_date across ref_quarter_end ordering.
-    Returns a DataFrame with added columns:
-      - <series>_level for each predictor/target present
-      - y_asof_latest_level, y_final_level
-      - y_asof_latest_model, y_final_model
-    """
-    # Build a quick freq map from catalog (meta uses PIT keys upper).
-    freq_map: dict[str, str] = {}
-    for s in [*predictor_keys, target_key]:
-        pit_key = series_key_map.get(s, s)
-        meta = catalog.get(pit_key)
-        if meta is not None:
-            freq_map[s] = (meta.frequency or "").strip().lower() or "m"
-
-    panel = panel.copy()
-
-    # Preserve target level columns
-    if "y_asof_latest" in panel.columns and "y_asof_latest_level" not in panel.columns:
-        panel["y_asof_latest_level"] = panel["y_asof_latest"]
-    if "y_final" in panel.columns and "y_final_level" not in panel.columns:
-        panel["y_final_level"] = panel["y_final"]
-
-    # Preserve predictor level columns
-    for s in predictor_keys:
-        if s in panel.columns and f"{s}_level" not in panel.columns:
-            panel[f"{s}_level"] = panel[s]
-
-    # Apply transforms within each vintage
-    def _transform_group(g: pd.DataFrame) -> pd.DataFrame:
-        g = g.sort_values("ref_quarter_end").copy()
-
-        # predictors
-        for s in predictor_keys:
-            if s not in g.columns:
-                continue
-            tr = transform_map.get(s, "level")
-            freq = freq_map.get(s, "m")
-            g[s] = _apply_transform_series(g[f"{s}_level"], tr, freq=freq)
-
-        # target: build model-space columns from preserved level columns
-        t_tr = transform_map.get(target_key, "level")
-        t_freq = freq_map.get(target_key, "q")
-        if "y_asof_latest_level" in g.columns:
-            g["y_asof_latest_model"] = _apply_transform_series(
-                g["y_asof_latest_level"], t_tr, freq=t_freq
-            )
-        if "y_final_level" in g.columns:
-            g["y_final_model"] = _apply_transform_series(g["y_final_level"], t_tr, freq=t_freq)
-
-        g["target_transform"] = t_tr
-        return g
-
-    panel = panel.groupby("asof_date", group_keys=False).apply(_transform_group)
-    return panel
-
-
-def _inverse_target_transform_one(
-    *,
-    y_pred_model: float | None,
-    target_transform: str,
-    ref_quarter: str,
-    asof_date: date,
-    panel: pd.DataFrame,
-) -> float | None:
-    """Attempt to invert the target transform to a level prediction for GDP.
-
-    Only implemented for a few simple transforms. For annualized log-diff (qoq_saar),
-    we use the previous quarter's y_final_level as the anchor.
-    """
-    if y_pred_model is None or (isinstance(y_pred_model, float) and np.isnan(y_pred_model)):
-        return None
-    t = (target_transform or "level").strip().lower()
-    if t in {"", "none", "level", "levels"}:
-        return float(y_pred_model)
-    if t == "log":
-        return float(np.exp(y_pred_model))
-    if t in {"qoq_saar", "logdiff_saar", "log_diff_saar", "log_diff_ann", "dlog_saar"}:
-        # y_pred_model is annualized log-diff: a*log(y_t/y_{t-1}) with a=400 for quarterly.
-        a = 400.0
-        prev_q = (pd.Period(ref_quarter, freq="Q") - 1).strftime("%YQ%q")
-        prev = panel[(panel["asof_date"] == asof_date) & (panel["ref_quarter"] == prev_q)]
-        if prev.empty:
-            return None
-        base = prev.iloc[0].get("y_final_level")
-        if base is None or (isinstance(base, float) and np.isnan(base)):
-            return None
-        return float(base * np.exp(float(y_pred_model) / a))
-    # other transforms not invertible without additional state
-    return None
-
-
-def _build_agg_spec(catalog: SeriesCatalog, predictor_keys: list[str]) -> dict[str, str]:
-    agg_spec: dict[str, str] = {}
-    for key in predictor_keys:
-        meta = catalog.get(key)
-        freq = (meta.frequency or "").lower() if meta else ""
-        if freq in {"d", "b"}:
-            agg_spec[key] = "last"
-        elif freq in {"m", "q"}:
-            agg_spec[key] = "mean"
-        else:
-            agg_spec[key] = "mean"
-    return agg_spec
+def describe_pipeline(pipe: Pipeline) -> str:
+    return "->".join(name for name, _ in pipe.steps)
 
 
 def _quarter_end_for_ref(ref_quarter: str) -> date:
     period = pd.Period(ref_quarter, freq="Q")
     return quarter_end_date(period)
+
+
+def _prev_ref_quarter(ref_quarter: str) -> str:
+    """Return the previous quarter string for a YYYYQq input."""
+    return (pd.Period(ref_quarter, freq="Q") - 1).strftime("%YQ%q")
+
+
+def implied_level_from_growth(
+    panel_vintage: pd.DataFrame,
+    ref_quarter: str,
+    y_pred_growth: float,
+) -> float | None:
+    """Convert QoQ SAAR growth prediction to implied level using prior quarter anchor."""
+    prev_q = _prev_ref_quarter(ref_quarter)
+    prev = panel_vintage[panel_vintage["ref_quarter"] == prev_q]
+    if prev.empty:
+        return None
+    # Prefer real-time anchor; fall back to stable third release if needed.
+    prev_row = prev.iloc[0]
+    anchor_level = prev_row["y_asof_latest_level"]
+    fallback_anchor = (
+        prev_row["y_final_3rd_level"] if pd.isna(anchor_level) else anchor_level
+    )
+    if pd.isna(fallback_anchor):
+        return None
+    return float(fallback_anchor * np.exp(y_pred_growth / 400.0))
 
 
 def _list_target_releases(
@@ -486,7 +349,6 @@ def main() -> None:
 
     meta_df = _collect_meta_table(meta_csv)
     series_keys = [str(s).strip().lower() for s in meta_df["series"].tolist() if str(s).strip()]
-    transform_map = _collect_transform_map(meta_csv)
     series_set = set(series_keys)
     series_key_map = _series_key_map(series_keys)
     pit_to_canonical = {v: k for k, v in series_key_map.items()}
@@ -507,7 +369,7 @@ def main() -> None:
         raise ValueError("alphaforge adapter is required for PIT access")
 
     predictor_pit_keys = [series_key_map[key] for key in predictor_keys]
-    agg_spec = _build_agg_spec(catalog, predictor_pit_keys)
+    agg_spec = build_agg_spec_from_recipes(predictor_pit_keys, pit_to_canonical)
 
     final_target_policy = TargetPolicy(mode="nth_release", nth=3, max_release_rank=3)
     config = VintageTrainingDatasetConfig(
@@ -603,8 +465,8 @@ def main() -> None:
                 final_target_policy,
             )
 
-            row_dict["y_asof_latest"] = y_asof_value if y_asof_value is not None else np.nan
-            row_dict["y_final"] = y_final_value if y_final_value is not None else np.nan
+            row_dict["y_asof_latest_level"] = y_asof_value if y_asof_value is not None else np.nan
+            row_dict["y_final_3rd_level"] = y_final_value if y_final_value is not None else np.nan
             row_dict["y_asof_latest_release_rank"] = y_asof_meta.get("selected_release_rank")
             row_dict["y_asof_latest_selected_asof_utc"] = y_asof_meta.get(
                 "selected_release_asof_utc"
@@ -621,56 +483,28 @@ def main() -> None:
     panel = pd.DataFrame(rows)
     panel["ref_quarter_end"] = panel["ref_quarter"].map(_quarter_end_for_ref)
 
-    # Apply per-series transforms (PIT-safe) if meta_data.csv provides them.
-    panel = _transform_panel_inplace(
-        panel,
-        meta_df=meta_df,
-        transform_map=transform_map,
-        catalog=catalog,
-        series_key_map=series_key_map,
-        predictor_keys=predictor_keys,
-        target_key=target_canonical,
-    )
+    def _add_growth(group: pd.DataFrame) -> pd.DataFrame:
+        group = group.sort_values("ref_quarter_end").copy()
+        group["y_asof_latest_growth"] = compute_gdp_qoq_saar(group["y_asof_latest_level"])
+        group["y_final_3rd_growth"] = compute_gdp_qoq_saar(group["y_final_3rd_level"])
+        return group
 
-    # Model labels are in model-space; preserve levels for audit.
-    label_cols = {"y_asof_latest_model", "y_final_model"}
-    meta_cols = {
-        "asof_date",
-        "ref_quarter",
-        "ref_offset",
-        "ref_quarter_end",
-        "target_transform",
-        "y_asof_latest_release_rank",
-        "y_asof_latest_selected_asof_utc",
-        "y_final_release_rank",
-        "y_final_selected_asof_utc",
-        "y_final_policy_mode",
-        "y_asof_latest_level",
-        "y_final_level",
-    }
-
-    # Exclude preserved level columns from features by default
-    feature_cols = [
-        c
-        for c in panel.columns
-        if c not in label_cols
-        and c not in meta_cols
-        and not c.endswith("_level")
-        and not c.startswith("y_")
-    ]
+    panel = panel.groupby("asof_date", group_keys=False).apply(_add_growth)
 
     alphas = [float(x.strip()) for x in args.alphas.split(",") if x.strip()]
 
+    raw_feature_cols = predictor_keys + ["asof_date", "ref_quarter_end"]
     predictions: list[dict] = []
     for asof_date in sorted(panel["asof_date"].unique()):
         history = panel[panel["asof_date"] < asof_date]
         if history.empty:
             continue
+        panel_vintage = panel[panel["asof_date"] == asof_date]
 
         for ref_offset in ref_offsets:
             history_offset = history[history["ref_offset"] == ref_offset]
             history_offset = history_offset[history_offset["ref_quarter_end"] <= train_end_date]
-            history_offset = history_offset[history_offset["y_final_model"].notna()]
+            history_offset = history_offset[history_offset["y_final_3rd_growth"].notna()]
 
             test_row = panel[
                 (panel["asof_date"] == asof_date) & (panel["ref_offset"] == ref_offset)
@@ -679,22 +513,17 @@ def main() -> None:
                 continue
             test_row = test_row.iloc[0]
 
-            y_pred_model, train_meta = _fit_predict_one(
-                history_offset,
-                test_row,
-                feature_cols=feature_cols,
-                label_col="y_final_model",
-                model=args.model,
-                alphas=alphas,
-            )
+            X_train = history_offset[raw_feature_cols]
+            y_train = history_offset["y_final_3rd_growth"]
+            X_test = test_row[raw_feature_cols].to_frame().T
 
-            target_tr = str(test_row.get("target_transform") or "level")
-            y_pred_level = _inverse_target_transform_one(
-                y_pred_model=y_pred_model,
-                target_transform=target_tr,
+            pipe = make_pipeline(args.model, predictor_keys, alphas)
+            pipe.fit(X_train, y_train)
+            y_pred_growth = float(pipe.predict(X_test)[0])
+            y_pred_level = implied_level_from_growth(
+                panel_vintage,
                 ref_quarter=str(test_row["ref_quarter"]),
-                asof_date=asof_date,
-                panel=panel,
+                y_pred_growth=y_pred_growth,
             )
 
             predictions.append(
@@ -703,22 +532,18 @@ def main() -> None:
                     "ref_quarter": test_row["ref_quarter"],
                     "ref_offset": ref_offset,
                     "ref_quarter_end": test_row["ref_quarter_end"],
-                    "target_transform": target_tr,
-                    "y_pred_model": y_pred_model,
+                    "y_pred_growth": y_pred_growth,
                     "y_pred_level": y_pred_level,
                     "y_asof_latest_level": test_row.get("y_asof_latest_level"),
-                    "y_asof_latest_model": test_row.get("y_asof_latest_model"),
-                    "y_final_level": test_row.get("y_final_level"),
-                    "y_final_3rd_model": test_row.get("y_final_model"),
+                    "y_asof_latest_growth": test_row.get("y_asof_latest_growth"),
+                    "y_final_3rd_level": test_row.get("y_final_3rd_level"),
+                    "y_final_3rd_growth": test_row.get("y_final_3rd_growth"),
                     "y_asof_latest_release_rank": test_row.get("y_asof_latest_release_rank"),
                     "y_asof_latest_selected_asof_utc": test_row.get(
                         "y_asof_latest_selected_asof_utc"
                     ),
                     "y_final_release_rank": test_row.get("y_final_release_rank"),
                     "y_final_selected_asof_utc": test_row.get("y_final_selected_asof_utc"),
-                    "n_train": train_meta["n_train"],
-                    "n_features": train_meta["n_features"],
-                    "alpha_selected": train_meta["alpha_selected"],
                 }
             )
 
@@ -750,18 +575,29 @@ def _compute_metrics(df: pd.DataFrame, *, pred_col: str, truth_col: str) -> dict
 
     return {"rmse": rmse, "mae": mae, "count": int(len(use)), "by_ref_offset": by_ref_offset}
 
+pipeline_for_metadata = make_pipeline(args.model, predictor_keys, alphas)
 metrics = {
-    "real_time_model_space": _compute_metrics(scored, pred_col="y_pred_model", truth_col="y_asof_latest_model"),
-    "stable_model_space_3rd_release": _compute_metrics(scored, pred_col="y_pred_model", truth_col="y_final_3rd_model"),
-    "real_time_level_space": _compute_metrics(scored, pred_col="y_pred_level", truth_col="y_asof_latest_level"),
-    "stable_level_space_3rd_release": _compute_metrics(scored, pred_col="y_pred_level", truth_col="y_final_level"),
+    "real_time_growth_space": _compute_metrics(
+        scored, pred_col="y_pred_growth", truth_col="y_asof_latest_growth"
+    ),
+    "stable_growth_space_3rd_release": _compute_metrics(
+        scored, pred_col="y_pred_growth", truth_col="y_final_3rd_growth"
+    ),
+    "real_time_level_space": _compute_metrics(
+        scored, pred_col="y_pred_level", truth_col="y_asof_latest_level"
+    ),
+    "stable_level_space_3rd_release": _compute_metrics(
+        scored, pred_col="y_pred_level", truth_col="y_final_3rd_level"
+    ),
 }
 
 run_metadata = {
     "target_input": args.target,
     "target_canonical": target_canonical,
     "target_pit_key": target_pit,
-    "target_transform": str(transform_map.get(target_canonical, "level")),
+    "training_label": "y_final_3rd_growth",
+    "feature_pipeline": describe_pipeline(pipeline_for_metadata),
+    "recipe_registry_version": "recipes_v1",
     "start_date": str(start_date),
     "end_date": str(end_date),
     "train_end_date": str(train_end_date),

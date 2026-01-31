@@ -57,6 +57,7 @@ Repository = "https://github.com/steveya/nowcast-data"
 [tool.setuptools]
 packages = [
     "nowcast_data",
+    "nowcast_data.features",
     "nowcast_data.pit",
     "nowcast_data.pit.adapters",
     "nowcast_data.pit.core",
