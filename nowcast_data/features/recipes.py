@@ -11,9 +11,6 @@ FeatureRecipeKind = Literal["rate", "index", "level", "flow"]
 class FeatureRecipe:
     kind: FeatureRecipeKind
     agg: AggRule
-    qoq: bool = True
-    yoy: bool = True
-    level: bool = True
     change: Literal["diff", "pct", "logdiff_saar", "logdiff"] = "pct"
 
 
