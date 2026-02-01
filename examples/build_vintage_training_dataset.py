@@ -476,8 +476,17 @@ def main() -> None:
         subset=["y_final_3rd_level"]
     )
     if truth_candidates.empty:
-        truth = pd.DataFrame(columns=["ref_quarter", "y_final_3rd_growth"])
+        truth = pd.DataFrame(
+            columns=[
+                "ref_quarter",
+                "first_release_asof_date",
+                "y_final_3rd_level",
+                "ref_quarter_end",
+                "y_final_3rd_growth",
+            ]
+        )
     else:
+        max_invariant_examples = 3
         grouped = truth_candidates.groupby("ref_quarter")["y_final_3rd_level"]
         spread = grouped.max() - grouped.min()
         scale = grouped.mean().abs()
@@ -486,7 +495,7 @@ def main() -> None:
         bad = spread > tolerance
         if bad.any():
             bad_list = bad[bad].index.tolist()
-            bad_quarters = bad_list[:3]
+            bad_quarters = bad_list[:max_invariant_examples]
             summary = (
                 truth_candidates[truth_candidates["ref_quarter"].isin(bad_quarters)]
                 .groupby("ref_quarter")["y_final_3rd_level"]
@@ -497,12 +506,12 @@ def main() -> None:
                 truth_candidates[truth_candidates["ref_quarter"].isin(bad_quarters)]
                 .sort_values(["ref_quarter", "asof_date"])
                 .groupby("ref_quarter")
-                .head(3)
+                .head(max_invariant_examples)
                 .to_string(index=False)
             )
             raise ValueError(
                 "Inconsistent y_final_3rd_level across vintages for ref_quarter(s): "
-                f"{bad_quarters} (showing first 3 of {len(bad_list)}). "
+                f"{bad_quarters} (showing first {max_invariant_examples} of {len(bad_list)}). "
                 f"Summary:\n{summary}\nExamples:\n{examples}"
             )
 
