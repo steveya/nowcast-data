@@ -102,3 +102,4 @@ def test_quarterly_feature_builder_passthrough_non_predictor_cols() -> None:
         out["y_asof_latest_growth"], df["y_asof_latest_growth"], check_names=False
     )
     assert {"unrate__level", "unrate__qoq", "unrate__yoy", "unrate__isna"}.issubset(out.columns)
+    pd.testing.assert_series_equal(out["unrate__level"], df["unrate"], check_names=False)
