@@ -56,6 +56,12 @@ from nowcast_data.pit.api import PITDataManager
 from nowcast_data.pit.core.catalog import SeriesCatalog
 from nowcast_data.pit.core.models import SeriesMetadata
 
+# Relative tolerance for cross-vintage 3rd-release consistency checks.
+RELATIVE_TOLERANCE = 1e-8
+# Absolute tolerance for cross-vintage 3rd-release consistency checks.
+ABSOLUTE_TOLERANCE = 1e-10
+MAX_INVARIANT_VIOLATION_EXAMPLES = 3
+
 
 def _compute_metrics(df: pd.DataFrame, *, pred_col: str, truth_col: str) -> dict:
     """Compute RMSE/MAE and ref-offset breakdown for prediction/truth columns."""
@@ -486,23 +492,23 @@ def main() -> None:
             ]
         )
     else:
-        max_invariant_examples = 3
+        max_invariant_examples = MAX_INVARIANT_VIOLATION_EXAMPLES
         grouped_stats = truth_candidates.groupby("ref_quarter")["y_final_3rd_level"].agg(
-            min="min",
-            max="max",
-            mean="mean",
+            min_value="min",
+            max_value="max",
+            mean_value="mean",
         )
-        spread = grouped_stats["max"] - grouped_stats["min"]
-        scale = grouped_stats["mean"].abs()
+        spread = grouped_stats["max_value"] - grouped_stats["min_value"]
+        scale = grouped_stats["mean_value"].abs()
         # Relative + absolute tolerance to accommodate large GDP levels and tiny float noise.
-        tolerance = 1e-8 * scale + 1e-10
+        tolerance = RELATIVE_TOLERANCE * scale + ABSOLUTE_TOLERANCE
         bad = spread > tolerance
         if bad.any():
             bad_list = bad[bad].index.tolist()
             bad_quarters = bad_list[:max_invariant_examples]
             bad_rows = truth_candidates[truth_candidates["ref_quarter"].isin(bad_quarters)]
             summary = grouped_stats.loc[bad_quarters].copy()
-            summary["spread"] = summary["max"] - summary["min"]
+            summary["spread"] = summary["max_value"] - summary["min_value"]
             examples = (
                 bad_rows
                 .sort_values(["ref_quarter", "asof_date"])
