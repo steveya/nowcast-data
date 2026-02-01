@@ -478,10 +478,10 @@ def main() -> None:
         return group
 
     panel = panel.groupby("asof_date", group_keys=False).apply(_add_asof_latest_growth)
-    truth_candidates = panel[["ref_quarter", "asof_date", "y_final_3rd_level"]].dropna(
+    third_release_observations = panel[["ref_quarter", "asof_date", "y_final_3rd_level"]].dropna(
         subset=["y_final_3rd_level"]
     )
-    if truth_candidates.empty:
+    if third_release_observations.empty:
         truth = pd.DataFrame(
             columns=[
                 "ref_quarter",
@@ -492,7 +492,7 @@ def main() -> None:
             ]
         )
     else:
-        grouped_stats = truth_candidates.groupby("ref_quarter")["y_final_3rd_level"].agg(
+        grouped_stats = third_release_observations.groupby("ref_quarter")["y_final_3rd_level"].agg(
             min_value="min",
             max_value="max",
             mean_value="mean",
@@ -503,9 +503,11 @@ def main() -> None:
         tolerance = RELATIVE_TOLERANCE * scale + ABSOLUTE_TOLERANCE
         bad = spread > tolerance
         if bad.any():
-            bad_list = bad[bad].index.tolist()
+            bad_list = bad.index[bad].tolist()
             bad_quarters = bad_list[:MAX_INVARIANT_VIOLATION_EXAMPLES]
-            bad_rows = truth_candidates[truth_candidates["ref_quarter"].isin(bad_quarters)]
+            bad_rows = third_release_observations[
+                third_release_observations["ref_quarter"].isin(bad_quarters)
+            ]
             summary = grouped_stats.loc[bad_quarters].copy()
             summary["spread"] = summary["max_value"] - summary["min_value"]
             examples = (
@@ -522,7 +524,7 @@ def main() -> None:
                 f"Summary:\n{summary}\nExamples:\n{examples}"
             )
 
-        sorted_candidates = truth_candidates.rename(
+        sorted_candidates = third_release_observations.rename(
             columns={"asof_date": "first_release_asof_date"}
         ).sort_values(["ref_quarter", "first_release_asof_date"])
         truth = sorted_candidates.groupby("ref_quarter", as_index=False).first()
