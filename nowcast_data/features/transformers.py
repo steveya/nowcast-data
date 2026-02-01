@@ -82,7 +82,11 @@ class QuarterlyFeatureBuilder(BaseEstimator, TransformerMixin):
                 if c not in {self.time_col, self.group_col} and c not in predictor_set
             ]
             # Exclude time/group columns; they are not model features.
-            passthrough = sorted_group[passthrough_cols].copy()
+            passthrough = (
+                sorted_group[passthrough_cols].copy()
+                if passthrough_cols
+                else pd.DataFrame(index=sorted_group.index)
+            )
             features = pd.DataFrame(index=sorted_group.index)
 
             for series_key in self.predictor_keys:
