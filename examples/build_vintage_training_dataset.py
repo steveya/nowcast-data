@@ -519,7 +519,7 @@ def main() -> None:
                 raise ValueError(
                     "Expected exactly one test row for "
                     f"asof_date={asof_date} ref_offset={ref_offset}; "
-                    f"found {len(test_rows)}. Check panel rows for this vintage/offset."
+                    f"found {len(test_rows)}. Check panel rows for this asof_date/offset."
                 )
             test_row = test_rows.iloc[0]
 
