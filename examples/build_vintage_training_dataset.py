@@ -60,7 +60,9 @@ from nowcast_data.pit.core.models import SeriesMetadata
 RELATIVE_TOLERANCE = 1e-8
 # Absolute tolerance floor for consistency checks when values are near zero.
 ABSOLUTE_TOLERANCE = 1e-10
+# Max number of quarters shown in invariant violation summaries.
 MAX_VIOLATION_QUARTERS = 3
+# Max number of example rows per quarter in invariant violation summaries.
 MAX_VIOLATION_ROWS = 3
 
 
@@ -525,10 +527,10 @@ def main() -> None:
                 f"Summary:\n{summary}\nExamples:\n{examples}"
             )
 
-        sorted_candidates = third_release_observations.rename(
+        sorted_third_releases = third_release_observations.rename(
             columns={"asof_date": "first_release_asof_date"}
         ).sort_values(["ref_quarter", "first_release_asof_date"])
-        truth = sorted_candidates.groupby("ref_quarter", as_index=False).first()
+        truth = sorted_third_releases.groupby("ref_quarter", as_index=False).first()
         truth["ref_quarter_end"] = truth["ref_quarter"].map(_quarter_end_for_ref)
         truth = truth.sort_values("ref_quarter_end")
         truth["y_final_3rd_growth"] = compute_gdp_qoq_saar(truth["y_final_3rd_level"])
