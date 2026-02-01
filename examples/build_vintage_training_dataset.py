@@ -58,9 +58,10 @@ from nowcast_data.pit.core.models import SeriesMetadata
 
 # Relative tolerance for cross-vintage 3rd-release consistency checks.
 RELATIVE_TOLERANCE = 1e-8
-# Absolute tolerance for cross-vintage 3rd-release consistency checks.
+# Absolute tolerance floor for consistency checks when values are near zero.
 ABSOLUTE_TOLERANCE = 1e-10
-MAX_INVARIANT_VIOLATION_EXAMPLES = 3
+MAX_VIOLATION_QUARTERS = 3
+MAX_VIOLATION_ROWS = 3
 
 
 def _compute_metrics(df: pd.DataFrame, *, pred_col: str, truth_col: str) -> dict:
@@ -498,13 +499,13 @@ def main() -> None:
             mean_value="mean",
         )
         spread = grouped_stats["max_value"] - grouped_stats["min_value"]
-        scale = grouped_stats["mean_value"].abs()
-        # Combined relative + absolute tolerance to accommodate large GDP levels and tiny float noise.
+        scale = grouped_stats[["min_value", "max_value"]].abs().max(axis=1)
+        # Combined relative + absolute tolerance; absolute term handles near-zero levels.
         tolerance = RELATIVE_TOLERANCE * scale + ABSOLUTE_TOLERANCE
         bad = spread > tolerance
         if bad.any():
             bad_list = bad.index[bad].tolist()
-            bad_quarters = bad_list[:MAX_INVARIANT_VIOLATION_EXAMPLES]
+            bad_quarters = bad_list[:MAX_VIOLATION_QUARTERS]
             bad_rows = third_release_observations[
                 third_release_observations["ref_quarter"].isin(bad_quarters)
             ]
@@ -514,7 +515,7 @@ def main() -> None:
                 bad_rows
                 .sort_values(["ref_quarter", "asof_date"])
                 .groupby("ref_quarter")
-                .head(MAX_INVARIANT_VIOLATION_EXAMPLES)
+                .head(MAX_VIOLATION_ROWS)
                 .to_string(index=False)
             )
             shown = len(bad_quarters)
