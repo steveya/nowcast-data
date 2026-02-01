@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date
 
 import pandas as pd
-
 from alphaforge.time.ref_period import RefFreq
+
 from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 
 

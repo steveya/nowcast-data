@@ -6,20 +6,13 @@ from datetime import date
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from nowcast_data.models.bridge import build_rt_quarterly_dataset
 from nowcast_data.models.datasets import VintageTrainingDatasetConfig
 from nowcast_data.models.panel import build_vintage_panel_dataset
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 from nowcast_data.pit.core.catalog import SeriesCatalog
 from nowcast_data.pit.core.models import SeriesMetadata
-
-try:
-    from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
-
-    HAS_ALPHAFORGE = True
-except ImportError:
-    HAS_ALPHAFORGE = False
 
 
 def _daily_catalog() -> SeriesCatalog:
@@ -37,7 +30,6 @@ def _daily_catalog() -> SeriesCatalog:
     return catalog
 
 
-@pytest.mark.skipif(not HAS_ALPHAFORGE, reason="alphaforge not installed")
 class TestDailyPredictors:
     def test_daily_cutoff_no_leakage(self, pit_context) -> None:
         """Current-quarter daily features must exclude obs_date after asof_date."""

@@ -4,19 +4,13 @@ from datetime import date
 
 import pandas as pd
 import pytest
+from alphaforge.data.context import DataContext
+from alphaforge.store.duckdb_parquet import DuckDBParquetStore
 
 from nowcast_data.models.datasets import _build_predictor_frame
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 from nowcast_data.pit.core.catalog import SeriesCatalog
 from nowcast_data.pit.core.models import SeriesMetadata
-
-try:
-    from alphaforge.data.context import DataContext
-    from alphaforge.store.duckdb_parquet import DuckDBParquetStore
-    from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
-
-    HAS_ALPHAFORGE = True
-except ImportError:
-    HAS_ALPHAFORGE = False
 
 
 def _make_ctx(tmp_path) -> DataContext:
@@ -25,7 +19,6 @@ def _make_ctx(tmp_path) -> DataContext:
     return ctx
 
 
-@pytest.mark.skipif(not HAS_ALPHAFORGE, reason="alphaforge not installed")
 class TestMonthlyObsDateAnchor:
     def test_monthly_anchor_start_accepts_month_start(self, tmp_path) -> None:
         ctx = _make_ctx(tmp_path)

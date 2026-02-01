@@ -4,6 +4,7 @@ from datetime import date
 
 from alphaforge.data.context import DataContext
 from alphaforge.store.duckdb_parquet import DuckDBParquetStore
+
 from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 
 

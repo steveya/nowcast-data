@@ -58,7 +58,10 @@ class PITDataManager:
                     )
                     self.adapters["alphaforge"] = AlphaForgePITAdapter(ctx=ctx)
                 else:
-                    print("Warning: FRED_API_KEY environment variable not set. FRED and AlphaForge adapters will not be available.")
+                    print(
+                        "Warning: FRED_API_KEY environment variable not set. "
+                        "FRED and AlphaForge adapters will not be available."
+                    )
             except ValueError:
                 # API key not available, skip FRED
                 pass

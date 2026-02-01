@@ -2,10 +2,10 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
-from nowcast_data.pit.api import PITDataManager
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
-from nowcast_data.pit.core.catalog import SeriesCatalog
 
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
+from nowcast_data.pit.api import PITDataManager
+from nowcast_data.pit.core.catalog import SeriesCatalog
 
 
 def test_get_usgdp_point_in_time(pit_context) -> None:

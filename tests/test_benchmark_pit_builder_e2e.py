@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
-
 import pandas as pd
-
 from alphaforge.data.context import DataContext
 from alphaforge.store.duckdb_parquet import DuckDBParquetStore
 

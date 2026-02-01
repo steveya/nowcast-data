@@ -38,12 +38,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0.0",
-    "duckdb>=0.9.0",
+    "pytest>=8",
+    "pytest-cov>=5",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "build>=1.2",
+    "twine>=5",
 ]
 storage = [
     "pyarrow>=12.0.0",
@@ -57,6 +57,7 @@ Repository = "https://github.com/steveya/nowcast-data"
 [tool.setuptools]
 packages = [
     "nowcast_data",
+    "nowcast_data.features",
     "nowcast_data.pit",
     "nowcast_data.pit.adapters",
     "nowcast_data.pit.core",
@@ -73,15 +74,60 @@ target-version = ["py310", "py311", "py312"]
 line-length = 100
 target-version = "py310"
 
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"examples/*.py" = ["E402", "F541", "I001", "E501", "F401", "UP035"]
+"notebooks/*.ipynb" = ["I001", "F401"]
+"nowcast_data/benchmark/pit_builder.py" = ["I001", "UP035", "F401", "UP045"]
+"nowcast_data/features/transformers.py" = ["UP037", "E501"]
+"nowcast_data/models/__init__.py" = ["I001"]
+"nowcast_data/models/bridge.py" = ["I001", "UP035", "B023", "E501"]
+"nowcast_data/models/datasets.py" = ["I001", "UP035", "B023"]
+"nowcast_data/models/panel.py" = ["UP035"]
+"nowcast_data/models/target_features.py" = ["I001"]
+"nowcast_data/models/target_policy.py" = ["I001", "B008"]
+"nowcast_data/models/utils.py" = ["B905"]
+"nowcast_data/pit/__init__.py" = ["I001"]
+"nowcast_data/pit/adapters/alphaforge.py" = ["I001", "UP006", "UP035", "UP045"]
+"nowcast_data/pit/adapters/alphaforge_layer.py" = ["I001", "UP045"]
+"nowcast_data/pit/adapters/base.py" = ["I001", "UP006", "UP035", "UP037", "UP045"]
+"nowcast_data/pit/adapters/boe.py" = ["I001", "UP006", "UP035", "UP045"]
+"nowcast_data/pit/adapters/ecb.py" = ["I001", "UP006", "UP035", "UP045"]
+"nowcast_data/pit/adapters/fred.py" = ["I001", "UP006", "UP035", "UP045", "F401", "B904", "F841"]
+"nowcast_data/pit/adapters/statcan.py" = ["I001", "UP006", "UP035", "UP045"]
+"nowcast_data/pit/adapters/swiss.py" = ["I001", "UP006", "UP035", "UP045"]
+"nowcast_data/pit/core/catalog.py" = ["I001", "UP006", "UP015", "UP035", "UP045", "F401"]
+"nowcast_data/pit/api.py" = ["I001", "UP035", "UP006", "UP045"]
+"nowcast_data/__init__.py" = ["I001"]
+"nowcast_data/pit/core/models.py" = ["I001", "UP006", "UP035", "UP045"]
+"nowcast_data/pit/core/vintage_logic.py" = ["I001", "UP006", "UP007", "UP035", "UP045", "B905", "F841", "E501"]
+"nowcast_data/time/__init__.py" = ["I001"]
+"nowcast_data/time/nowcast_calendar.py" = ["I001", "UP037", "UP045"]
+"tests/*.py" = ["I001", "F401", "E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["nowcast_data"]
+
 [tool.mypy]
 python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = false
 disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-q"
+
+[tool.coverage.run]
+branch = true
+source = ["nowcast_data"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+skip_empty = true

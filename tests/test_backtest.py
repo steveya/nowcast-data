@@ -10,13 +10,7 @@ import pandas as pd
 import pytest
 
 from nowcast_data.models.backtest import BacktestConfig, make_vintage_dates, run_backtest
-
-try:
-    from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
-
-    HAS_ALPHAFORGE = True
-except ImportError:
-    HAS_ALPHAFORGE = False
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 
 
 class TestMakeVintageDates:
@@ -106,7 +100,6 @@ class TestBacktestConfig:
         assert config.include_y_asof_latest_as_feature is False
 
 
-@pytest.mark.skipif(not HAS_ALPHAFORGE, reason="alphaforge not installed")
 class TestRunBacktest:
     """Tests for run_backtest function."""
 

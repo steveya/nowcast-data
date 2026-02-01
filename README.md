@@ -30,6 +30,8 @@ cd nowcast-data
 # Install dependencies
 pip install -e .
 
+# Note: alphaforge is pulled directly from GitHub, so ensure git access.
+
 # Optional: Install storage dependencies
 pip install -e ".[storage]"
 

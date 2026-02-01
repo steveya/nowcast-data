@@ -1,8 +1,8 @@
 from datetime import date
 from pathlib import Path
 
-from nowcast_data.pit.api import PITDataManager
 from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
+from nowcast_data.pit.api import PITDataManager
 from nowcast_data.pit.core.catalog import SeriesCatalog
 
 

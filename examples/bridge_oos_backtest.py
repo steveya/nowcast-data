@@ -45,7 +45,10 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression, RidgeCV
 
-from nowcast_data.models.datasets import VintageTrainingDatasetConfig, build_vintage_training_dataset
+from nowcast_data.models.datasets import (
+    VintageTrainingDatasetConfig,
+    build_vintage_training_dataset,
+)
 from nowcast_data.models.target_features import QuarterlyTargetFeatureSpec
 from nowcast_data.models.target_policy import TargetPolicy
 from nowcast_data.pit.api import PITDataManager
@@ -483,7 +486,9 @@ def main() -> None:
         include_y_asof_latest_as_feature=args.include_y_asof_latest_as_feature,
     )
     if panel.empty:
-        raise RuntimeError("Built empty panel. Check that PIT data exists and the store root is correct.")
+        raise RuntimeError(
+            "Built empty panel. Check that PIT data exists and the store root is correct."
+        )
 
     # Walk-forward training label: final GDP (offline). This matches the project goal.
     label_col = "y_final"
@@ -554,7 +559,10 @@ def main() -> None:
     }
 
     # Persist
-    pred_path = out_dir / f"predictions_{target}_{args.vintage_grid}.{'parquet' if args.out_format=='parquet' else 'csv'}"
+    pred_path = out_dir / (
+        f"predictions_{target}_{args.vintage_grid}."
+        f"{'parquet' if args.out_format == 'parquet' else 'csv'}"
+    )
     metrics_path = out_dir / f"metrics_{target}_{args.vintage_grid}.json"
 
     if args.out_format == "parquet":

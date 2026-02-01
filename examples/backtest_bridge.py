@@ -27,8 +27,8 @@ def main() -> None:
     print("=" * 80)
     print(f"\nBacktest period: {start_date} to {end_date}")
     print("Vintage frequency: B (business days)")
-    print(f"Target series: US_GDP_SAAR")
-    print(f"Predictors: US_CPI, US_UNRATE")
+    print("Target series: US_GDP_SAAR")
+    print("Predictors: US_CPI, US_UNRATE")
 
     # Configuration shared across both label modes
     agg_spec = {"US_CPI": "mean", "US_UNRATE": "mean"}
