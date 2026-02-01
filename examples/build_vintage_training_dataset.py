@@ -475,7 +475,9 @@ def main() -> None:
     truth_candidates = panel[["ref_quarter", "asof_date", "y_final_3rd_level"]].dropna(
         subset=["y_final_3rd_level"]
     )
-    if not truth_candidates.empty:
+    if truth_candidates.empty:
+        truth = pd.DataFrame(columns=["ref_quarter", "y_final_3rd_growth"])
+    else:
         grouped = truth_candidates.groupby("ref_quarter")["y_final_3rd_level"]
         spread = grouped.max() - grouped.min()
         scale = grouped.mean().abs()
@@ -501,13 +503,13 @@ def main() -> None:
                 f"{bad_quarters}. Summary:\n{summary}\nExamples:\n{examples}"
             )
 
-    truth = truth_candidates.rename(columns={"asof_date": "first_release_asof_date"}).sort_values(
-        ["ref_quarter", "first_release_asof_date"]
-    )
-    truth = truth.groupby("ref_quarter", as_index=False).first()
-    truth["ref_quarter_end"] = truth["ref_quarter"].map(_quarter_end_for_ref)
-    truth = truth.sort_values("ref_quarter_end")
-    truth["y_final_3rd_growth"] = compute_gdp_qoq_saar(truth["y_final_3rd_level"])
+        sorted_candidates = truth_candidates.rename(
+            columns={"asof_date": "first_release_asof_date"}
+        ).sort_values(["ref_quarter", "first_release_asof_date"])
+        truth = sorted_candidates.groupby("ref_quarter", as_index=False).first()
+        truth["ref_quarter_end"] = truth["ref_quarter"].map(_quarter_end_for_ref)
+        truth = truth.sort_values("ref_quarter_end")
+        truth["y_final_3rd_growth"] = compute_gdp_qoq_saar(truth["y_final_3rd_level"])
     panel = panel.merge(
         truth[["ref_quarter", "y_final_3rd_growth"]],
         on="ref_quarter",
