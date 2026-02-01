@@ -28,6 +28,7 @@ from datetime import date
 from pathlib import Path
 import numpy as np
 import pandas as pd
+from sklearn.base import clone
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression, RidgeCV
 from sklearn.pipeline import Pipeline
@@ -210,6 +211,35 @@ def make_pipeline(model: str, predictor_keys: list[str], alphas: list[float]) ->
 
 def describe_pipeline(pipe: Pipeline) -> str:
     return "->".join(name for name, _ in pipe.steps)
+
+
+def build_base_cols(predictor_keys: list[str]) -> list[str]:
+    return [*predictor_keys, "asof_date", "ref_quarter_end"]
+
+
+def build_model_matrices(
+    *,
+    history_offset: pd.DataFrame,
+    test_row: pd.Series,
+    predictor_keys: list[str],
+) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
+    """Return (X_train, X_test, base_cols) with a stable schema.
+
+    history_offset supplies the training panel for a single ref_offset, test_row is the
+    target vintage row, and predictor_keys defines the expected raw predictors. Missing
+    columns are added as NaN to keep a consistent schema.
+    """
+    base_cols = build_base_cols(predictor_keys)
+    X_train = history_offset[[c for c in base_cols if c in history_offset.columns]].copy()
+    X_test = test_row[[c for c in base_cols if c in test_row.index]].to_frame().T.copy()
+    for col in base_cols:
+        if col not in X_train.columns:
+            X_train[col] = np.nan
+        if col not in X_test.columns:
+            X_test[col] = np.nan
+    X_train = X_train[base_cols]
+    X_test = X_test[base_cols]
+    return X_train, X_test, base_cols
 
 
 def _quarter_end_for_ref(ref_quarter: str) -> date:
@@ -439,14 +469,23 @@ def main() -> None:
         return group
 
     panel = panel.groupby("asof_date", group_keys=False).apply(_add_asof_latest_growth)
+    # Median aggregation avoids reliance on a single vintage when building stable truth.
+    quarter_end_map = panel[["ref_quarter", "ref_quarter_end"]].drop_duplicates(
+        subset=["ref_quarter"]
+    )
     stable = (
         panel[["ref_quarter", "ref_quarter_end", "y_final_3rd_level"]]
         .dropna(subset=["y_final_3rd_level"])
+        .groupby("ref_quarter", as_index=False)["y_final_3rd_level"]
+        .median()
+        .merge(
+            quarter_end_map,
+            on="ref_quarter",
+            how="left",
+        )
         .sort_values("ref_quarter_end")
-        # Keep first stable level per ref_quarter after sorting by ref_quarter_end.
-        .drop_duplicates(subset=["ref_quarter"], keep="first")
-        .copy()
     )
+    # Median aggregation smooths across vintages, even if the exact value never appeared.
     stable["y_final_3rd_growth"] = compute_gdp_qoq_saar(stable["y_final_3rd_level"])
     panel = panel.merge(
         stable[["ref_quarter", "y_final_3rd_growth"]],
@@ -457,7 +496,7 @@ def main() -> None:
 
     alphas = [float(x.strip()) for x in args.alphas.split(",") if x.strip()]
 
-    raw_feature_cols = predictor_keys + ["asof_date", "ref_quarter_end"]
+    pipeline_cache: dict[str, Pipeline] = {}
     predictions: list[dict] = []
     for asof_date in sorted(panel["asof_date"].unique()):
         history = panel[panel["asof_date"] < asof_date]
@@ -469,6 +508,13 @@ def main() -> None:
             history_offset = history[history["ref_offset"] == ref_offset]
             history_offset = history_offset[history_offset["ref_quarter_end"] <= train_end_date]
             history_offset = history_offset[history_offset["y_final_3rd_growth"].notna()]
+            available_predictors = [c for c in predictor_keys if c in history_offset.columns]
+            if available_predictors:
+                n_raw_predictors_present_train = int(
+                    history_offset[available_predictors].notna().any(axis=0).sum()
+                )
+            else:
+                n_raw_predictors_present_train = 0
 
             test_row = panel[
                 (panel["asof_date"] == asof_date) & (panel["ref_offset"] == ref_offset)
@@ -477,17 +523,24 @@ def main() -> None:
                 continue
             test_row = test_row.iloc[0]
 
-            X_train = history_offset[raw_feature_cols]
+            X_train, X_test, base_cols = build_model_matrices(
+                history_offset=history_offset,
+                test_row=test_row,
+                predictor_keys=predictor_keys,
+            )
             y_train = history_offset["y_final_3rd_growth"]
-            X_test = test_row[raw_feature_cols].to_frame().T
 
-            pipe = make_pipeline(args.model, predictor_keys, alphas)
+            # Pipeline structure is fully determined by model choice, alphas, and predictor list.
+            pipe_key = ("pipeline_v1", args.model, tuple(alphas), tuple(predictor_keys))
+            if pipe_key not in pipeline_cache:
+                pipeline_cache[pipe_key] = make_pipeline(args.model, predictor_keys, alphas)
+            pipe = clone(pipeline_cache[pipe_key])
             pipe.fit(X_train, y_train)
             y_pred_growth = float(pipe.predict(X_test)[0])
             missing_filter = pipe.named_steps.get("miss")
             keep_cols = missing_filter.keep_cols_ if missing_filter is not None else None
             # None means no missing filter step in pipeline; 0 means all features dropped by it.
-            n_features_post_filter = int(len(keep_cols)) if keep_cols is not None else None
+            n_features_after_missing_filter = int(len(keep_cols)) if keep_cols is not None else None
             if args.model == "ridge":
                 alpha_selected = float(pipe.named_steps["model"].alpha_)
             else:
@@ -517,7 +570,13 @@ def main() -> None:
                     "y_final_release_rank": test_row.get("y_final_release_rank"),
                     "y_final_selected_asof_utc": test_row.get("y_final_selected_asof_utc"),
                     "n_train": int(len(X_train)),
-                    "n_features_post_filter": n_features_post_filter,
+                    "n_raw_predictors_expected": int(len(predictor_keys)),
+                    "n_raw_predictors_present_train": n_raw_predictors_present_train,
+                    "n_raw_features_total": int(len(base_cols)),
+                    # n_features_post_filter retained for backwards compatibility (deprecated,
+                    # remove after 2026-12, use n_features_engineered_post_filter instead).
+                    "n_features_post_filter": n_features_after_missing_filter,
+                    "n_features_engineered_post_filter": n_features_after_missing_filter,
                     "alpha_selected": alpha_selected,
                     "feature_pipeline": describe_pipeline(pipe),
                 }
@@ -532,6 +591,7 @@ def main() -> None:
     scored = pred_df.loc[score_mask].copy()
 
     pipeline_for_metadata = make_pipeline(args.model, predictor_keys, alphas)
+    metadata_base_cols = build_base_cols(predictor_keys)
     metrics = {
         "real_time_growth_space": _compute_metrics(
             scored, pred_col="y_pred_growth", truth_col="y_asof_latest_growth"
@@ -555,6 +615,11 @@ def main() -> None:
         "feature_pipeline": describe_pipeline(pipeline_for_metadata),
         "recipe_registry_version": "recipes_v1",
         "level_anchor_policy": "real_time_only",
+        "n_raw_predictors_expected": int(len(predictor_keys)),
+        "feature_schema": {
+            "base_cols": metadata_base_cols,
+            "time_cols": ["asof_date", "ref_quarter_end"],
+        },
         "start_date": str(start_date),
         "end_date": str(end_date),
         "train_end_date": str(train_end_date),
