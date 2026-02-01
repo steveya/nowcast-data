@@ -205,6 +205,20 @@ def _collect_meta_table(meta_csv: Path) -> pd.DataFrame:
     return df
 
 
+def _format_invariant_error(
+    *,
+    bad_quarters: list[str],
+    total_bad: int,
+    summary: pd.DataFrame,
+    examples: str,
+) -> str:
+    return (
+        "Inconsistent y_final_3rd_level across vintages for ref_quarter(s): "
+        f"{bad_quarters} (showing {len(bad_quarters)} of {total_bad}). "
+        f"Summary:\n{summary}\nExamples:\n{examples}"
+    )
+
+
 def make_pipeline(model: str, predictor_keys: list[str], alphas: list[float]) -> Pipeline:
     steps = [
         ("feat", QuarterlyFeatureBuilder(predictor_keys=predictor_keys)),
@@ -520,17 +534,19 @@ def main() -> None:
                 .head(MAX_VIOLATION_ROWS)
                 .to_string(index=False)
             )
-            shown = len(bad_quarters)
             raise ValueError(
-                "Inconsistent y_final_3rd_level across vintages for ref_quarter(s): "
-                f"{bad_quarters} (showing {shown} of {len(bad_list)}). "
-                f"Summary:\n{summary}\nExamples:\n{examples}"
+                _format_invariant_error(
+                    bad_quarters=bad_quarters,
+                    total_bad=len(bad_list),
+                    summary=summary,
+                    examples=examples,
+                )
             )
 
-        sorted_third_releases = third_release_observations.rename(
-            columns={"asof_date": "first_release_asof_date"}
-        ).sort_values(["ref_quarter", "first_release_asof_date"])
-        truth = sorted_third_releases.groupby("ref_quarter", as_index=False).first()
+        sorted_observations = third_release_observations.sort_values(
+            ["ref_quarter", "asof_date"]
+        ).rename(columns={"asof_date": "first_release_asof_date"})
+        truth = sorted_observations.groupby("ref_quarter", as_index=False).first()
         truth["ref_quarter_end"] = truth["ref_quarter"].map(_quarter_end_for_ref)
         truth = truth.sort_values("ref_quarter_end")
         truth["y_final_3rd_growth"] = compute_gdp_qoq_saar(truth["y_final_3rd_level"])
