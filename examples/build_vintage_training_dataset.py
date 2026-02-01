@@ -472,19 +472,44 @@ def main() -> None:
         return group
 
     panel = panel.groupby("asof_date", group_keys=False).apply(_add_asof_latest_growth)
-    # Median aggregation smooths across vintages; ref_quarter_end is derived deterministically
-    # from ref_quarter.
-    stable = (
-        panel[["ref_quarter", "y_final_3rd_level"]]
-        .dropna(subset=["y_final_3rd_level"])
-        .groupby("ref_quarter", as_index=False)["y_final_3rd_level"]
-        .median()
+    truth_candidates = panel[["ref_quarter", "asof_date", "y_final_3rd_level"]].dropna(
+        subset=["y_final_3rd_level"]
     )
-    stable["ref_quarter_end"] = stable["ref_quarter"].map(_quarter_end_for_ref)
-    stable = stable.sort_values("ref_quarter_end")
-    stable["y_final_3rd_growth"] = compute_gdp_qoq_saar(stable["y_final_3rd_level"])
+    if not truth_candidates.empty:
+        grouped = truth_candidates.groupby("ref_quarter")["y_final_3rd_level"]
+        spread = grouped.max() - grouped.min()
+        scale = grouped.mean().abs()
+        tolerance = 1e-8 * scale + 1e-10
+        bad = spread > tolerance
+        if bad.any():
+            bad_quarters = bad[bad].index.tolist()[:3]
+            summary = (
+                truth_candidates[truth_candidates["ref_quarter"].isin(bad_quarters)]
+                .groupby("ref_quarter")["y_final_3rd_level"]
+                .agg(min="min", max="max", mean="mean")
+            )
+            summary["spread"] = summary["max"] - summary["min"]
+            examples = (
+                truth_candidates[truth_candidates["ref_quarter"].isin(bad_quarters)]
+                .sort_values(["ref_quarter", "asof_date"])
+                .groupby("ref_quarter")
+                .head(3)
+                .to_string(index=False)
+            )
+            raise ValueError(
+                "Inconsistent y_final_3rd_level across vintages for ref_quarter(s): "
+                f"{bad_quarters}. Summary:\n{summary}\nExamples:\n{examples}"
+            )
+
+    truth = truth_candidates.rename(columns={"asof_date": "first_release_asof_date"}).sort_values(
+        ["ref_quarter", "first_release_asof_date"]
+    )
+    truth = truth.groupby("ref_quarter", as_index=False).first()
+    truth["ref_quarter_end"] = truth["ref_quarter"].map(_quarter_end_for_ref)
+    truth = truth.sort_values("ref_quarter_end")
+    truth["y_final_3rd_growth"] = compute_gdp_qoq_saar(truth["y_final_3rd_level"])
     panel = panel.merge(
-        stable[["ref_quarter", "y_final_3rd_growth"]],
+        truth[["ref_quarter", "y_final_3rd_growth"]],
         on="ref_quarter",
         how="left",
         validate="m:1",
@@ -635,8 +660,9 @@ def main() -> None:
         "feature_pipeline": describe_pipeline(pipeline_for_metadata),
         "recipe_registry_version": "recipes_v1",
         "level_anchor_policy": "real_time_only",
-        "stable_truth_policy": "median_across_vintages",
+        "stable_truth_policy": "third_release_first_observed",
         "stable_truth_release": "nth_release_3",
+        "stable_truth_first_observed_asof_col": "first_release_asof_date",
         "n_raw_predictors_expected": int(len(predictor_keys)),
         "feature_schema": {
             "base_cols": metadata_base_cols,
