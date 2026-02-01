@@ -492,7 +492,6 @@ def main() -> None:
             ]
         )
     else:
-        max_invariant_examples = MAX_INVARIANT_VIOLATION_EXAMPLES
         grouped_stats = truth_candidates.groupby("ref_quarter")["y_final_3rd_level"].agg(
             min_value="min",
             max_value="max",
@@ -500,12 +499,12 @@ def main() -> None:
         )
         spread = grouped_stats["max_value"] - grouped_stats["min_value"]
         scale = grouped_stats["mean_value"].abs()
-        # Relative + absolute tolerance to accommodate large GDP levels and tiny float noise.
+        # Combined relative + absolute tolerance to accommodate large GDP levels and tiny float noise.
         tolerance = RELATIVE_TOLERANCE * scale + ABSOLUTE_TOLERANCE
         bad = spread > tolerance
         if bad.any():
             bad_list = bad[bad].index.tolist()
-            bad_quarters = bad_list[:max_invariant_examples]
+            bad_quarters = bad_list[:MAX_INVARIANT_VIOLATION_EXAMPLES]
             bad_rows = truth_candidates[truth_candidates["ref_quarter"].isin(bad_quarters)]
             summary = grouped_stats.loc[bad_quarters].copy()
             summary["spread"] = summary["max_value"] - summary["min_value"]
@@ -513,12 +512,13 @@ def main() -> None:
                 bad_rows
                 .sort_values(["ref_quarter", "asof_date"])
                 .groupby("ref_quarter")
-                .head(max_invariant_examples)
+                .head(MAX_INVARIANT_VIOLATION_EXAMPLES)
                 .to_string(index=False)
             )
+            shown = len(bad_quarters)
             raise ValueError(
                 "Inconsistent y_final_3rd_level across vintages for ref_quarter(s): "
-                f"{bad_quarters} (showing first {max_invariant_examples} of {len(bad_list)}). "
+                f"{bad_quarters} (showing {shown} of {len(bad_list)}). "
                 f"Summary:\n{summary}\nExamples:\n{examples}"
             )
 
