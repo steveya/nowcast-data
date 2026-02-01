@@ -29,7 +29,7 @@ RECIPE_REGISTRY: dict[str, FeatureRecipe] = {
     "pcepilfe": FeatureRecipe(kind="index", agg="mean", change="logdiff_saar"),
     "payems": FeatureRecipe(kind="level", agg="mean", change="pct"),
     "indpro": FeatureRecipe(kind="index", agg="mean", change="pct"),
-    "rsafs": FeatureRecipe(kind="flow", agg="mean", change="pct"),
+    "rsafs": FeatureRecipe(kind="flow", agg="sum", change="pct"),
     "houst": FeatureRecipe(kind="level", agg="mean", change="pct"),
     "permit": FeatureRecipe(kind="level", agg="mean", change="pct"),
 }
@@ -46,5 +46,8 @@ def build_agg_spec_from_recipes(
     for pit_key in predictor_pit_keys:
         canonical = pit_to_canonical.get(pit_key, pit_key).strip().lower()
         recipe = get_recipe(canonical)
-        agg_spec[pit_key] = recipe.agg
+        agg = recipe.agg
+        if recipe.kind == "flow" and agg == "mean":
+            agg = "sum"
+        agg_spec[pit_key] = agg
     return agg_spec

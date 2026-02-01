@@ -15,6 +15,10 @@ Example:
     --evaluation-asof-date 2025-12-31 \
     --ref-offsets=-1,0,1 \
     --out-dir outputs/gdp_walkforward_event
+
+Notes:
+  level_anchor_policy=real_time_only anchors implied level predictions using the
+  prior-quarter real-time GDP level (no stable-truth fallback).
 """
 
 import argparse
@@ -22,8 +26,6 @@ import json
 from dataclasses import asdict
 from datetime import date
 from pathlib import Path
-from typing import Iterable
-
 import numpy as np
 import pandas as pd
 from sklearn.impute import SimpleImputer
@@ -49,6 +51,28 @@ from nowcast_data.models.target_policy import (
 from nowcast_data.pit.api import PITDataManager
 from nowcast_data.pit.core.catalog import SeriesCatalog
 from nowcast_data.pit.core.models import SeriesMetadata
+
+
+def _compute_metrics(df: pd.DataFrame, *, pred_col: str, truth_col: str) -> dict:
+    """Compute RMSE/MAE and ref-offset breakdown for prediction/truth columns."""
+    use = df[df[pred_col].notna() & df[truth_col].notna()].copy()
+    if use.empty:
+        return {"rmse": np.nan, "mae": np.nan, "count": 0, "by_ref_offset": {}}
+
+    err = use[pred_col] - use[truth_col]
+    rmse = float(np.sqrt(np.mean(err**2)))
+    mae = float(np.mean(np.abs(err)))
+
+    by_ref_offset: dict[str, dict] = {}
+    for ref_offset, g in use.groupby("ref_offset"):
+        e = g[pred_col] - g[truth_col]
+        by_ref_offset[str(ref_offset)] = {
+            "rmse": float(np.sqrt(np.mean(e**2))) if len(g) else np.nan,
+            "mae": float(np.mean(np.abs(e))) if len(g) else np.nan,
+            "count": int(len(g)),
+        }
+
+    return {"rmse": rmse, "mae": mae, "count": int(len(use)), "by_ref_offset": by_ref_offset}
 
 
 def _parse_date(value: str) -> date:
@@ -203,20 +227,16 @@ def implied_level_from_growth(
     ref_quarter: str,
     y_pred_growth: float,
 ) -> float | None:
-    """Convert QoQ SAAR growth prediction to implied level using prior quarter anchor."""
+    """Convert QoQ SAAR growth prediction to implied level using real-time anchor only."""
     prev_q = _prev_ref_quarter(ref_quarter)
     prev = panel_vintage[panel_vintage["ref_quarter"] == prev_q]
     if prev.empty:
         return None
-    # Prefer real-time anchor; fall back to stable third release if needed.
     prev_row = prev.iloc[0]
     anchor_level = prev_row["y_asof_latest_level"]
-    fallback_anchor = (
-        prev_row["y_final_3rd_level"] if pd.isna(anchor_level) else anchor_level
-    )
-    if pd.isna(fallback_anchor):
+    if pd.isna(anchor_level):
         return None
-    return float(fallback_anchor * np.exp(y_pred_growth / 400.0))
+    return float(anchor_level * np.exp(y_pred_growth / 400.0))
 
 
 def _list_target_releases(
@@ -242,76 +262,6 @@ def _list_target_releases(
         asof_date=asof_date,
     )
     return releases_start
-
-
-def _compute_metrics(df: pd.DataFrame, truth_col: str) -> dict:
-    use = df[df["y_pred"].notna() & df[truth_col].notna()].copy()
-    if use.empty:
-        return {"rmse": np.nan, "mae": np.nan, "count": 0, "by_ref_offset": {}}
-
-    err = use["y_pred"] - use[truth_col]
-    rmse = float(np.sqrt(np.mean(err**2)))
-    mae = float(np.mean(np.abs(err)))
-
-    by_ref_offset: dict[str, dict] = {}
-    for ref_offset, g in use.groupby("ref_offset"):
-        e = g["y_pred"] - g[truth_col]
-        by_ref_offset[str(ref_offset)] = {
-            "rmse": float(np.sqrt(np.mean(e**2))) if len(g) else np.nan,
-            "mae": float(np.mean(np.abs(e))) if len(g) else np.nan,
-            "count": int(len(g)),
-        }
-
-    return {"rmse": rmse, "mae": mae, "count": int(len(use)), "by_ref_offset": by_ref_offset}
-
-
-def _fit_predict_one(
-    train_df: pd.DataFrame,
-    test_row: pd.Series,
-    *,
-    feature_cols: list[str],
-    label_col: str,
-    model: str = "ridge",
-    alphas: list[float] | None = None,
-) -> tuple[float | None, dict]:
-    if train_df.empty:
-        return None, {"n_train": 0, "n_features": 0, "alpha_selected": np.nan}
-
-    X = train_df[feature_cols].copy()
-    y = train_df[label_col].copy()
-
-    nan_frac = X.isna().mean()
-    keep_cols = nan_frac[nan_frac <= 0.5].index.tolist()
-    X = X[keep_cols]
-    if X.empty:
-        return None, {"n_train": int(len(train_df)), "n_features": 0, "alpha_selected": np.nan}
-
-    means = X.mean()
-    stds = X.std(ddof=0).replace(0.0, 1.0)
-    X = X.fillna(means)
-    X = (X - means) / stds
-
-    alpha_selected = np.nan
-    if model == "ridge":
-        reg = RidgeCV(alphas=alphas or [0.01, 0.1, 1.0, 10.0, 100.0])
-        reg.fit(X.to_numpy(), y.to_numpy())
-        alpha_selected = float(reg.alpha_)
-    elif model == "ols":
-        reg = LinearRegression(fit_intercept=True)
-        reg.fit(X.to_numpy(), y.to_numpy())
-    else:
-        raise ValueError(f"Unknown model: {model}")
-
-    x0 = test_row[keep_cols].copy()
-    x0 = x0.fillna(means)
-    x0 = (x0 - means) / stds
-    y_pred = float(reg.predict(x0.to_numpy().reshape(1, -1))[0])
-
-    return y_pred, {
-        "n_train": int(len(train_df)),
-        "n_features": int(len(keep_cols)),
-        "alpha_selected": alpha_selected,
-    }
 
 
 def main() -> None:
@@ -483,13 +433,27 @@ def main() -> None:
     panel = pd.DataFrame(rows)
     panel["ref_quarter_end"] = panel["ref_quarter"].map(_quarter_end_for_ref)
 
-    def _add_growth(group: pd.DataFrame) -> pd.DataFrame:
+    def _add_asof_latest_growth(group: pd.DataFrame) -> pd.DataFrame:
         group = group.sort_values("ref_quarter_end").copy()
         group["y_asof_latest_growth"] = compute_gdp_qoq_saar(group["y_asof_latest_level"])
-        group["y_final_3rd_growth"] = compute_gdp_qoq_saar(group["y_final_3rd_level"])
         return group
 
-    panel = panel.groupby("asof_date", group_keys=False).apply(_add_growth)
+    panel = panel.groupby("asof_date", group_keys=False).apply(_add_asof_latest_growth)
+    stable = (
+        panel[["ref_quarter", "ref_quarter_end", "y_final_3rd_level"]]
+        .dropna(subset=["y_final_3rd_level"])
+        .sort_values("ref_quarter_end")
+        # Keep first stable level per ref_quarter after sorting by ref_quarter_end.
+        .drop_duplicates(subset=["ref_quarter"], keep="first")
+        .copy()
+    )
+    stable["y_final_3rd_growth"] = compute_gdp_qoq_saar(stable["y_final_3rd_level"])
+    panel = panel.merge(
+        stable[["ref_quarter", "y_final_3rd_growth"]],
+        on="ref_quarter",
+        how="left",
+        validate="m:1",
+    )
 
     alphas = [float(x.strip()) for x in args.alphas.split(",") if x.strip()]
 
@@ -520,6 +484,14 @@ def main() -> None:
             pipe = make_pipeline(args.model, predictor_keys, alphas)
             pipe.fit(X_train, y_train)
             y_pred_growth = float(pipe.predict(X_test)[0])
+            missing_filter = pipe.named_steps.get("miss")
+            keep_cols = missing_filter.keep_cols_ if missing_filter is not None else None
+            # None means no missing filter step in pipeline; 0 means all features dropped by it.
+            n_features_post_filter = int(len(keep_cols)) if keep_cols is not None else None
+            if args.model == "ridge":
+                alpha_selected = float(pipe.named_steps["model"].alpha_)
+            else:
+                alpha_selected = np.nan
             y_pred_level = implied_level_from_growth(
                 panel_vintage,
                 ref_quarter=str(test_row["ref_quarter"]),
@@ -544,75 +516,60 @@ def main() -> None:
                     ),
                     "y_final_release_rank": test_row.get("y_final_release_rank"),
                     "y_final_selected_asof_utc": test_row.get("y_final_selected_asof_utc"),
+                    "n_train": int(len(X_train)),
+                    "n_features_post_filter": n_features_post_filter,
+                    "alpha_selected": alpha_selected,
+                    "feature_pipeline": describe_pipeline(pipe),
                 }
             )
 
-pred_df = pd.DataFrame(predictions)
-pred_df = pred_df.sort_values(["asof_date", "ref_offset"])
+    pred_df = pd.DataFrame(predictions)
+    pred_df = pred_df.sort_values(["asof_date", "ref_offset"])
 
-score_mask = (pred_df["ref_quarter_end"] >= score_start_date) & (
-    pred_df["ref_quarter_end"] <= score_end_date
-)
-scored = pred_df.loc[score_mask].copy()
+    score_mask = (pred_df["ref_quarter_end"] >= score_start_date) & (
+        pred_df["ref_quarter_end"] <= score_end_date
+    )
+    scored = pred_df.loc[score_mask].copy()
 
-def _compute_metrics(df: pd.DataFrame, *, pred_col: str, truth_col: str) -> dict:
-    use = df[df[pred_col].notna() & df[truth_col].notna()].copy()
-    if use.empty:
-        return {"rmse": np.nan, "mae": np.nan, "count": 0, "by_ref_offset": {}}
+    pipeline_for_metadata = make_pipeline(args.model, predictor_keys, alphas)
+    metrics = {
+        "real_time_growth_space": _compute_metrics(
+            scored, pred_col="y_pred_growth", truth_col="y_asof_latest_growth"
+        ),
+        "stable_growth_space_3rd_release": _compute_metrics(
+            scored, pred_col="y_pred_growth", truth_col="y_final_3rd_growth"
+        ),
+        "real_time_level_space": _compute_metrics(
+            scored, pred_col="y_pred_level", truth_col="y_asof_latest_level"
+        ),
+        "stable_level_space_3rd_release": _compute_metrics(
+            scored, pred_col="y_pred_level", truth_col="y_final_3rd_level"
+        ),
+    }
 
-    err = use[pred_col] - use[truth_col]
-    rmse = float(np.sqrt(np.mean(err**2)))
-    mae = float(np.mean(np.abs(err)))
-
-    by_ref_offset: dict[str, dict] = {}
-    for ref_offset, g in use.groupby("ref_offset"):
-        e = g[pred_col] - g[truth_col]
-        by_ref_offset[str(ref_offset)] = {
-            "rmse": float(np.sqrt(np.mean(e**2))) if len(g) else np.nan,
-            "mae": float(np.mean(np.abs(e))) if len(g) else np.nan,
-            "count": int(len(g)),
-        }
-
-    return {"rmse": rmse, "mae": mae, "count": int(len(use)), "by_ref_offset": by_ref_offset}
-
-pipeline_for_metadata = make_pipeline(args.model, predictor_keys, alphas)
-metrics = {
-    "real_time_growth_space": _compute_metrics(
-        scored, pred_col="y_pred_growth", truth_col="y_asof_latest_growth"
-    ),
-    "stable_growth_space_3rd_release": _compute_metrics(
-        scored, pred_col="y_pred_growth", truth_col="y_final_3rd_growth"
-    ),
-    "real_time_level_space": _compute_metrics(
-        scored, pred_col="y_pred_level", truth_col="y_asof_latest_level"
-    ),
-    "stable_level_space_3rd_release": _compute_metrics(
-        scored, pred_col="y_pred_level", truth_col="y_final_3rd_level"
-    ),
-}
-
-run_metadata = {
-    "target_input": args.target,
-    "target_canonical": target_canonical,
-    "target_pit_key": target_pit,
-    "training_label": "y_final_3rd_growth",
-    "feature_pipeline": describe_pipeline(pipeline_for_metadata),
-    "recipe_registry_version": "recipes_v1",
-    "start_date": str(start_date),
-    "end_date": str(end_date),
-    "train_end_date": str(train_end_date),
-    "score_start_date": str(score_start_date),
-    "score_end_date": str(score_end_date),
-    "evaluation_asof_date": str(evaluation_asof_date),
-    "ref_offsets": ref_offsets,
-    "predictor_count": len(predictor_keys),
-    "predictors": predictor_keys,
-    "predictor_pit_keys": predictor_pit_keys,
-    "drop_predictors": sorted(drop_predictors),
-    "event_vintage_count": len(event_vintages),
-    "ingest_from_ctx_source": bool(args.ingest_from_ctx_source),
-    "final_target_policy": asdict(final_target_policy),
-}
+    run_metadata = {
+        "target_input": args.target,
+        "target_canonical": target_canonical,
+        "target_pit_key": target_pit,
+        "training_label": "y_final_3rd_growth",
+        "feature_pipeline": describe_pipeline(pipeline_for_metadata),
+        "recipe_registry_version": "recipes_v1",
+        "level_anchor_policy": "real_time_only",
+        "start_date": str(start_date),
+        "end_date": str(end_date),
+        "train_end_date": str(train_end_date),
+        "score_start_date": str(score_start_date),
+        "score_end_date": str(score_end_date),
+        "evaluation_asof_date": str(evaluation_asof_date),
+        "ref_offsets": ref_offsets,
+        "predictor_count": len(predictor_keys),
+        "predictors": predictor_keys,
+        "predictor_pit_keys": predictor_pit_keys,
+        "drop_predictors": sorted(drop_predictors),
+        "event_vintage_count": len(event_vintages),
+        "ingest_from_ctx_source": bool(args.ingest_from_ctx_source),
+        "final_target_policy": asdict(final_target_policy),
+    }
 
     predictions_path = out_dir / "predictions.parquet"
     metrics_path = out_dir / "metrics.json"
