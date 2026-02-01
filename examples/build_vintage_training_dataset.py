@@ -495,10 +495,10 @@ def main() -> None:
         return group
 
     panel = panel.groupby("asof_date", group_keys=False).apply(_add_asof_latest_growth)
-    third_release_observations = panel[["ref_quarter", "asof_date", "y_final_3rd_level"]].dropna(
+    third_release_data = panel[["ref_quarter", "asof_date", "y_final_3rd_level"]].dropna(
         subset=["y_final_3rd_level"]
     )
-    if third_release_observations.empty:
+    if third_release_data.empty:
         truth = pd.DataFrame(
             columns=[
                 "ref_quarter",
@@ -509,7 +509,7 @@ def main() -> None:
             ]
         )
     else:
-        grouped_stats = third_release_observations.groupby("ref_quarter")["y_final_3rd_level"].agg(
+        grouped_stats = third_release_data.groupby("ref_quarter")["y_final_3rd_level"].agg(
             min_value="min",
             max_value="max",
             mean_value="mean",
@@ -518,14 +518,14 @@ def main() -> None:
         scale = grouped_stats[["min_value", "max_value"]].abs().max(axis=1)
         # Combined relative + absolute tolerance; absolute term handles near-zero levels.
         tolerance = RELATIVE_TOLERANCE * scale + ABSOLUTE_TOLERANCE
-        bad = spread > tolerance
-        if bad.any():
-            bad_list = bad.index[bad].tolist()
-            bad_quarters = bad_list[:MAX_VIOLATION_QUARTERS]
-            bad_rows = third_release_observations[
-                third_release_observations["ref_quarter"].isin(bad_quarters)
+        inconsistent_quarters = spread > tolerance
+        if inconsistent_quarters.any():
+            inconsistent_quarters_all = inconsistent_quarters.index[inconsistent_quarters].tolist()
+            inconsistent_quarters_sample = inconsistent_quarters_all[:MAX_VIOLATION_QUARTERS]
+            bad_rows = third_release_data[
+                third_release_data["ref_quarter"].isin(inconsistent_quarters_sample)
             ]
-            summary = grouped_stats.loc[bad_quarters].copy()
+            summary = grouped_stats.loc[inconsistent_quarters_sample].copy()
             summary["spread"] = summary["max_value"] - summary["min_value"]
             examples = (
                 bad_rows
@@ -536,14 +536,14 @@ def main() -> None:
             )
             raise ValueError(
                 _format_invariant_error(
-                    bad_quarters=bad_quarters,
-                    total_bad=len(bad_list),
+                    bad_quarters=inconsistent_quarters_sample,
+                    total_bad=len(inconsistent_quarters_all),
                     summary=summary,
                     examples=examples,
                 )
             )
 
-        sorted_observations = third_release_observations.sort_values(
+        sorted_observations = third_release_data.sort_values(
             ["ref_quarter", "asof_date"]
         ).rename(columns={"asof_date": "first_release_asof_date"})
         truth = sorted_observations.groupby("ref_quarter", as_index=False).first()
