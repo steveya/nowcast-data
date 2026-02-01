@@ -487,23 +487,24 @@ def main() -> None:
         )
     else:
         max_invariant_examples = 3
-        grouped = truth_candidates.groupby("ref_quarter")["y_final_3rd_level"]
-        spread = grouped.max() - grouped.min()
-        scale = grouped.mean().abs()
-        # Relative + absolute tolerance to handle large GDP levels while allowing tiny float noise.
+        grouped_stats = truth_candidates.groupby("ref_quarter")["y_final_3rd_level"].agg(
+            min="min",
+            max="max",
+            mean="mean",
+        )
+        spread = grouped_stats["max"] - grouped_stats["min"]
+        scale = grouped_stats["mean"].abs()
+        # Relative + absolute tolerance to accommodate large GDP levels and tiny float noise.
         tolerance = 1e-8 * scale + 1e-10
         bad = spread > tolerance
         if bad.any():
             bad_list = bad[bad].index.tolist()
             bad_quarters = bad_list[:max_invariant_examples]
-            summary = (
-                truth_candidates[truth_candidates["ref_quarter"].isin(bad_quarters)]
-                .groupby("ref_quarter")["y_final_3rd_level"]
-                .agg(min="min", max="max", mean="mean")
-            )
+            bad_rows = truth_candidates[truth_candidates["ref_quarter"].isin(bad_quarters)]
+            summary = grouped_stats.loc[bad_quarters].copy()
             summary["spread"] = summary["max"] - summary["min"]
             examples = (
-                truth_candidates[truth_candidates["ref_quarter"].isin(bad_quarters)]
+                bad_rows
                 .sort_values(["ref_quarter", "asof_date"])
                 .groupby("ref_quarter")
                 .head(max_invariant_examples)
