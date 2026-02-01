@@ -535,14 +535,14 @@ def main() -> None:
                 )
             y_train = history_offset.loc[X_train.index, "y_final_3rd_growth"]
             if not X_train.index.equals(y_train.index):
-                in_x_missing_from_y = list(X_train.index.difference(y_train.index)[:5])
-                in_y_missing_from_x = list(y_train.index.difference(X_train.index)[:5])
+                x_not_in_y = list(X_train.index.difference(y_train.index)[:5])
+                y_not_in_x = list(y_train.index.difference(X_train.index)[:5])
                 raise ValueError(
                     "X_train index mismatch with y_train "
                     f"(train={len(X_train.index)} y_train={len(y_train.index)}). "
                     "Check for filtering or alignment issues in history_offset. "
-                    f"in_x_missing_from_y[:5]={in_x_missing_from_y} "
-                    f"in_y_missing_from_x[:5]={in_y_missing_from_x}"
+                    f"x_not_in_y[:5]={x_not_in_y} "
+                    f"y_not_in_x[:5]={y_not_in_x}"
                 )
 
             # Pipeline structure is fully determined by model choice, alphas, and predictor list.
