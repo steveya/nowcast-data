@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date
-import re
-from typing import Optional
 
 try:  # pragma: no cover - optional dependency
-    from alphaforge.time.ref_period import RefPeriod, RefFreq
+    from alphaforge.time.ref_period import RefFreq, RefPeriod
 except ImportError:  # pragma: no cover - fallback for type hints
     RefPeriod = None  # type: ignore[assignment]
     RefFreq = None  # type: ignore[assignment]
@@ -25,7 +24,7 @@ class _FallbackRefPeriod:
         return f"{self.year}Q{self.quarter}"
 
 
-def _make_ref_period(year: int, quarter: int) -> "RefPeriod | _FallbackRefPeriod":
+def _make_ref_period(year: int, quarter: int) -> RefPeriod | _FallbackRefPeriod:
     ref_str = f"{year}Q{quarter}"
     if RefPeriod is None:
         return _FallbackRefPeriod(year=year, quarter=quarter)
@@ -35,13 +34,13 @@ def _make_ref_period(year: int, quarter: int) -> "RefPeriod | _FallbackRefPeriod
     return ref
 
 
-def _refperiod_to_key(ref: "RefPeriod | _FallbackRefPeriod | str") -> str:
+def _refperiod_to_key(ref: RefPeriod | _FallbackRefPeriod | str) -> str:
     if hasattr(ref, "to_key"):
         return ref.to_key()  # type: ignore[no-any-return]
     return str(ref)
 
 
-def _refperiod_to_obs_date(ref: "RefPeriod | _FallbackRefPeriod | str") -> date:
+def _refperiod_to_obs_date(ref: RefPeriod | _FallbackRefPeriod | str) -> date:
     ref_key = _refperiod_to_key(ref)
     match = re.match(r"^(\d{4})Q(\d+)$", ref_key)
     if not match:
@@ -59,13 +58,13 @@ def _refperiod_to_obs_date(ref: "RefPeriod | _FallbackRefPeriod | str") -> date:
     return date(year, 12, 31)
 
 
-def infer_current_quarter(asof_date: date) -> "RefPeriod | _FallbackRefPeriod":
+def infer_current_quarter(asof_date: date) -> RefPeriod | _FallbackRefPeriod:
     """Infer the current reference quarter from an asof date."""
     quarter = ((asof_date.month - 1) // 3) + 1
     return _make_ref_period(asof_date.year, quarter)
 
 
-def infer_previous_quarter(asof_date: date) -> "RefPeriod | _FallbackRefPeriod":
+def infer_previous_quarter(asof_date: date) -> RefPeriod | _FallbackRefPeriod:
     """Infer the previous reference quarter from an asof date."""
     quarter = ((asof_date.month - 1) // 3) + 1
     year = asof_date.year
@@ -77,7 +76,7 @@ def infer_previous_quarter(asof_date: date) -> "RefPeriod | _FallbackRefPeriod":
     return _make_ref_period(year, quarter)
 
 
-def refperiod_to_quarter_end(ref: "RefPeriod | _FallbackRefPeriod | str") -> date:
+def refperiod_to_quarter_end(ref: RefPeriod | _FallbackRefPeriod | str) -> date:
     """Convert a ref period to its quarter-end date."""
     return _refperiod_to_obs_date(ref)
 
@@ -86,8 +85,8 @@ def get_target_asof_ref(
     adapter: PITAdapter,
     series_id_or_key: str,
     asof_date: date,
-    ref: "RefPeriod | _FallbackRefPeriod | str",
-    freq: Optional["RefFreq"] = None,
+    ref: RefPeriod | _FallbackRefPeriod | str,
+    freq: RefFreq | None = None,
     *,
     metadata=None,
 ) -> float | None:

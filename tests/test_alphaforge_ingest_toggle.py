@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from datetime import date
 
-import pytest
+from alphaforge.data.context import DataContext
+from alphaforge.store.duckdb_parquet import DuckDBParquetStore
 
-pytest.importorskip("alphaforge")
-from alphaforge.data.context import DataContext  # noqa: E402
-from alphaforge.store.duckdb_parquet import DuckDBParquetStore  # noqa: E402
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 
 
 def test_fetch_asof_skips_ingestion(tmp_path, monkeypatch) -> None:

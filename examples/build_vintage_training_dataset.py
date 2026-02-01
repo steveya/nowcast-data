@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Event-vintage walk-forward GDP backtest (revision-aware, PIT-only by default).
 
 Example:
@@ -21,12 +19,16 @@ Notes:
   prior-quarter real-time GDP level (no stable-truth fallback).
 """
 
+from __future__ import annotations
+
 import argparse
 import json
+from collections.abc import Iterable
 from dataclasses import asdict
 from datetime import date
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
+
 import numpy as np
 import pandas as pd
 from sklearn.base import clone

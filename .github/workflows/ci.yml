@@ -15,10 +15,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install alphaforge
+        run: |
+          git clone https://github.com/steveya/alphaforge /tmp/alphaforge
+          python -m pip install -e /tmp/alphaforge
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+            ${{ runner.os }}-pip-
       - name: Install dependencies
         run: |
           python -m pip install -U pip
-          python -m pip install -e ".[dev,alphaforge]"
+          python -m pip install -e ".[dev]"
       - name: Lint
         run: ruff check .
       - name: Tests
@@ -33,7 +45,8 @@ jobs:
           name: coverage-${{ matrix.python-version }}
           path: coverage.xml
       - name: Upload dist
+        if: ${{ matrix.python-version == '3.12' }}
         uses: actions/upload-artifact@v4
         with:
-          name: dist-${{ matrix.python-version }}
+          name: dist
           path: dist/*

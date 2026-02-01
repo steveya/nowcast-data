@@ -1,7 +1,5 @@
 from datetime import date
 
-import pytest
-
 from nowcast_data.pit.adapters.base import PITAdapter
 from nowcast_data.time.nowcast_calendar import get_target_asof_ref
 

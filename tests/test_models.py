@@ -1,6 +1,7 @@
 """Tests for PIT data models and schema."""
 
-from datetime import date, datetime
+from datetime import date
+
 import pandas as pd
 import pytest
 

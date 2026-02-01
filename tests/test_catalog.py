@@ -1,8 +1,7 @@
 """Tests for series catalog."""
 
-from pathlib import Path
 import tempfile
-import pytest
+from pathlib import Path
 
 from nowcast_data.pit.core.catalog import SeriesCatalog
 from nowcast_data.pit.core.models import SeriesMetadata

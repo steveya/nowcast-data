@@ -9,10 +9,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-pytest.importorskip("alphaforge")
-from nowcast_data.models.backtest import BacktestConfig, make_vintage_dates, run_backtest  # noqa: E402
-
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
+from nowcast_data.models.backtest import BacktestConfig, make_vintage_dates, run_backtest
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 
 
 class TestMakeVintageDates:

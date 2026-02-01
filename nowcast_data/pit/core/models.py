@@ -2,9 +2,9 @@
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Optional, Literal, Dict, Any, List
-import pandas as pd
+from typing import Any, Literal
 
+import pandas as pd
 
 PITMode = Literal["ALFRED_REALTIME", "DISCRETE_VINTAGES_SNAP", "NO_PIT"]
 
@@ -19,12 +19,12 @@ class SeriesMetadata:
     source_series_id: str
     frequency: str
     pit_mode: PITMode
-    seasonal_adjustment: Optional[str] = None
-    units: Optional[str] = None
-    description: Optional[str] = None
-    transforms: Optional[list] = None
-    adapter: Optional[str] = None
-    obs_date_anchor: Optional[Literal["start", "end"]] = None
+    seasonal_adjustment: str | None = None
+    units: str | None = None
+    description: str | None = None
+    transforms: list | None = None
+    adapter: str | None = None
+    obs_date_anchor: Literal["start", "end"] | None = None
 
 
 @dataclass
@@ -39,15 +39,15 @@ class PITObservation:
     obs_date: date
     value: float
     frequency: str
-    value_raw: Optional[str] = None
-    units: Optional[str] = None
-    seasonal_adjustment: Optional[str] = None
-    realtime_start: Optional[date] = None
-    realtime_end: Optional[date] = None
-    ingested_at: Optional[datetime] = None
-    provenance: Optional[Dict[str, Any]] = None
+    value_raw: str | None = None
+    units: str | None = None
+    seasonal_adjustment: str | None = None
+    realtime_start: date | None = None
+    realtime_end: date | None = None
+    ingested_at: datetime | None = None
+    provenance: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for DataFrame construction."""
         return {
             "series_key": self.series_key,
@@ -68,7 +68,7 @@ class PITObservation:
         }
 
 
-def create_pit_dataframe(observations: List[PITObservation]) -> pd.DataFrame:
+def create_pit_dataframe(observations: list[PITObservation]) -> pd.DataFrame:
     """
     Create a canonical PIT DataFrame from observations.
 

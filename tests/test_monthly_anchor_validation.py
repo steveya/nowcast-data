@@ -4,14 +4,13 @@ from datetime import date
 
 import pandas as pd
 import pytest
+from alphaforge.data.context import DataContext
+from alphaforge.store.duckdb_parquet import DuckDBParquetStore
 
-pytest.importorskip("alphaforge")
-from nowcast_data.models.datasets import _build_predictor_frame  # noqa: E402
-from nowcast_data.pit.core.catalog import SeriesCatalog  # noqa: E402
-from nowcast_data.pit.core.models import SeriesMetadata  # noqa: E402
-from alphaforge.data.context import DataContext  # noqa: E402
-from alphaforge.store.duckdb_parquet import DuckDBParquetStore  # noqa: E402
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
+from nowcast_data.models.datasets import _build_predictor_frame
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
+from nowcast_data.pit.core.catalog import SeriesCatalog
+from nowcast_data.pit.core.models import SeriesMetadata
 
 
 def _make_ctx(tmp_path) -> DataContext:

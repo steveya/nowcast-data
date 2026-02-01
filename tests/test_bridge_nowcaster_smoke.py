@@ -1,16 +1,14 @@
 from datetime import date
 
 import pandas as pd
-import pytest
 
-pytest.importorskip("alphaforge")
-from nowcast_data.models.bridge import (  # noqa: E402
+from nowcast_data.models.bridge import (
     BridgeConfig,
     BridgeNowcaster,
     build_rt_quarterly_dataset,
 )
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
-from nowcast_data.time.nowcast_calendar import infer_current_quarter  # noqa: E402
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
+from nowcast_data.time.nowcast_calendar import infer_current_quarter
 
 
 def test_bridge_nowcaster_smoke(pit_context) -> None:

@@ -1,11 +1,9 @@
 from datetime import date
 
 import pandas as pd
-import pytest
 
-pytest.importorskip("alphaforge")
-from nowcast_data.models.bridge import build_rt_quarterly_dataset  # noqa: E402
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
+from nowcast_data.models.bridge import build_rt_quarterly_dataset
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 
 
 def test_bridge_builder_no_leakage(pit_context) -> None:

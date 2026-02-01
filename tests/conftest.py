@@ -4,14 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-
-try:
-    from alphaforge.data.context import DataContext
-    from alphaforge.store.duckdb_parquet import DuckDBParquetStore
-
-    HAS_ALPHAFORGE = True
-except ImportError:
-    HAS_ALPHAFORGE = False
+from alphaforge.data.context import DataContext
+from alphaforge.store.duckdb_parquet import DuckDBParquetStore
 
 
 @pytest.fixture
@@ -20,9 +14,6 @@ def pit_context(tmp_path: Path) -> DataContext:
 
     Skips the test if alphaforge is not installed.
     """
-    if not HAS_ALPHAFORGE:
-        pytest.skip("alphaforge is not installed")
-
     store = DuckDBParquetStore(root=str(tmp_path))
     ctx = DataContext(sources={}, calendars={}, store=store)
     base_rows = [

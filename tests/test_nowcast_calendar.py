@@ -2,7 +2,9 @@ from datetime import date
 
 import pandas as pd
 import pytest
+from alphaforge.time.ref_period import RefFreq
 
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 from nowcast_data.pit.adapters.base import PITAdapter
 from nowcast_data.time.nowcast_calendar import (
     get_target_asof_ref,
@@ -10,14 +12,6 @@ from nowcast_data.time.nowcast_calendar import (
     infer_previous_quarter,
     refperiod_to_quarter_end,
 )
-
-try:
-    from alphaforge.time.ref_period import RefFreq
-    from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
-
-    HAS_ALPHAFORGE = True
-except ImportError:  # pragma: no cover - optional dependency for test suite
-    HAS_ALPHAFORGE = False
 
 
 def test_infer_current_quarter_boundaries() -> None:
@@ -59,7 +53,6 @@ def test_refperiod_to_quarter_end_accepts_string() -> None:
     assert refperiod_to_quarter_end("2025Q4") == date(2025, 12, 31)
 
 
-@pytest.mark.skipif(not HAS_ALPHAFORGE, reason="alphaforge not installed")
 def test_get_target_asof_ref_matches_vintage(pit_context) -> None:
     adapter = AlphaForgePITAdapter(ctx=pit_context)
     df = pd.DataFrame(
@@ -100,7 +93,6 @@ def test_get_target_asof_ref_matches_vintage(pit_context) -> None:
     assert value_latest == 3.5
 
 
-@pytest.mark.skipif(not HAS_ALPHAFORGE, reason="alphaforge not installed")
 def test_get_target_asof_ref_missing_returns_none(pit_context) -> None:
     adapter = AlphaForgePITAdapter(ctx=pit_context)
     ref = infer_previous_quarter(date(2025, 2, 15))
@@ -114,7 +106,6 @@ def test_get_target_asof_ref_missing_returns_none(pit_context) -> None:
     assert value is None
 
 
-@pytest.mark.skipif(not HAS_ALPHAFORGE, reason="alphaforge not installed")
 def test_get_target_asof_ref_multiple_observations_raises(pit_context, monkeypatch) -> None:
     adapter = AlphaForgePITAdapter(ctx=pit_context)
     ref = infer_previous_quarter(date(2025, 2, 15))

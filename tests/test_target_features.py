@@ -2,14 +2,12 @@ from datetime import date
 
 import numpy as np
 import pandas as pd
-import pytest
 
-pytest.importorskip("alphaforge")
-from nowcast_data.models.target_features import (  # noqa: E402
+from nowcast_data.models.target_features import (
     QuarterlyTargetFeatureSpec,
     get_quarterly_target_release_features,
 )
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 
 
 def test_quarterly_target_release_features_between_releases(pit_context) -> None:

@@ -6,15 +6,13 @@ from datetime import date
 
 import numpy as np
 import pandas as pd
-import pytest
 
-pytest.importorskip("alphaforge")
-from nowcast_data.models.bridge import build_rt_quarterly_dataset  # noqa: E402
-from nowcast_data.models.datasets import VintageTrainingDatasetConfig  # noqa: E402
-from nowcast_data.models.panel import build_vintage_panel_dataset  # noqa: E402
-from nowcast_data.pit.core.catalog import SeriesCatalog  # noqa: E402
-from nowcast_data.pit.core.models import SeriesMetadata  # noqa: E402
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
+from nowcast_data.models.bridge import build_rt_quarterly_dataset
+from nowcast_data.models.datasets import VintageTrainingDatasetConfig
+from nowcast_data.models.panel import build_vintage_panel_dataset
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
+from nowcast_data.pit.core.catalog import SeriesCatalog
+from nowcast_data.pit.core.models import SeriesMetadata
 
 
 def _daily_catalog() -> SeriesCatalog:

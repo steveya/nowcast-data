@@ -13,14 +13,9 @@ from nowcast_data.pit.adapters.boe import BOERTDBAdapter
 from nowcast_data.pit.adapters.statcan import StatCanRealTimeAdapter
 from nowcast_data.pit.adapters.swiss import SwissAdapter
 from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
-try:  # pragma: no cover - optional dependency
-    from alphaforge.data.context import DataContext
-    from alphaforge.data.fred_source import FREDDataSource
-    from alphaforge.store.duckdb_parquet import DuckDBParquetStore
-except ImportError:  # pragma: no cover - optional dependency
-    DataContext = None  # type: ignore[assignment]
-    FREDDataSource = None  # type: ignore[assignment]
-    DuckDBParquetStore = None  # type: ignore[assignment]
+from alphaforge.data.context import DataContext
+from alphaforge.data.fred_source import FREDDataSource
+from alphaforge.store.duckdb_parquet import DuckDBParquetStore
 from nowcast_data.pit.core.catalog import SeriesCatalog
 from nowcast_data.pit.core.models import create_pit_dataframe, create_wide_view
 from nowcast_data.pit.exceptions import PITNotSupportedError
@@ -54,21 +49,19 @@ class PITDataManager:
                 fred_api_key = os.environ.get("FRED_API_KEY")
                 if fred_api_key:
                     self.adapters["FRED_ALFRED"] = FREDALFREDAdapter(api_key=fred_api_key)
-                    if (
-                        DataContext is not None
-                        and DuckDBParquetStore is not None
-                        and FREDDataSource is not None
-                    ):
-                        store_root = os.environ.get("ALPHAFORGE_STORE_ROOT", ".alphaforge_store")
-                        store = DuckDBParquetStore(root=store_root)
-                        ctx = DataContext(
-                            sources={"fred": FREDDataSource(api_key=fred_api_key)},
-                            calendars={},
-                            store=store,
-                        )
-                        self.adapters["alphaforge"] = AlphaForgePITAdapter(ctx=ctx)
+                    store_root = os.environ.get("ALPHAFORGE_STORE_ROOT", ".alphaforge_store")
+                    store = DuckDBParquetStore(root=store_root)
+                    ctx = DataContext(
+                        sources={"fred": FREDDataSource(api_key=fred_api_key)},
+                        calendars={},
+                        store=store,
+                    )
+                    self.adapters["alphaforge"] = AlphaForgePITAdapter(ctx=ctx)
                 else:
-                    print("Warning: FRED_API_KEY environment variable not set. FRED and AlphaForge adapters will not be available.")
+                    print(
+                        "Warning: FRED_API_KEY environment variable not set. "
+                        "FRED and AlphaForge adapters will not be available."
+                    )
             except ValueError:
                 # API key not available, skip FRED
                 pass

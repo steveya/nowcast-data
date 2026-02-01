@@ -2,16 +2,14 @@ from datetime import date
 
 import numpy as np
 import pandas as pd
-import pytest
 
-pytest.importorskip("alphaforge")
-from nowcast_data.models.datasets import (  # noqa: E402
+from nowcast_data.models.datasets import (
     VintageTrainingDatasetConfig,
     build_vintage_training_dataset,
 )
-from nowcast_data.models.target_features import QuarterlyTargetFeatureSpec  # noqa: E402
-from nowcast_data.models.target_policy import TargetPolicy  # noqa: E402
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
+from nowcast_data.models.target_features import QuarterlyTargetFeatureSpec
+from nowcast_data.models.target_policy import TargetPolicy
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 
 
 def test_build_vintage_training_dataset_with_target_features(pit_context) -> None:

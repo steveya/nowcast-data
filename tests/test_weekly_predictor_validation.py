@@ -1,15 +1,13 @@
 from datetime import date
 
 import pandas as pd
-import pytest
 
-pytest.importorskip("alphaforge")
-from nowcast_data.models.bridge import build_rt_quarterly_dataset  # noqa: E402
-from nowcast_data.models.datasets import (  # noqa: E402
+from nowcast_data.models.bridge import build_rt_quarterly_dataset
+from nowcast_data.models.datasets import (
     VintageTrainingDatasetConfig,
     build_vintage_training_dataset,
 )
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 
 
 def test_weekly_predictor_without_metadata_does_not_raise(pit_context) -> None:

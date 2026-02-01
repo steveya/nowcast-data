@@ -2,9 +2,8 @@ from datetime import date
 
 import pytest
 
-pytest.importorskip("alphaforge")
-from nowcast_data.models.bridge import build_rt_quarterly_dataset  # noqa: E402
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
+from nowcast_data.models.bridge import build_rt_quarterly_dataset
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 
 
 def test_agg_spec_extra_keys_raises(pit_context) -> None:

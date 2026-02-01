@@ -7,10 +7,8 @@ from datetime import date
 import pandas as pd
 import pytest
 
-pytest.importorskip("alphaforge")
-from nowcast_data.models.bridge import BridgeConfig, BridgeNowcaster  # noqa: E402
-from alphaforge.time.ref_period import RefFreq  # noqa: E402
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
+from nowcast_data.models.bridge import BridgeConfig, BridgeNowcaster
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 
 
 def test_bridge_nowcaster_offline_label_smoke(pit_context) -> None:

@@ -1,7 +1,6 @@
 """Tests for vintage selection logic."""
 
 from datetime import date
-import pytest
 
 from nowcast_data.pit.core.vintage_logic import (
     select_vintage_for_asof,

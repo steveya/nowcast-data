@@ -1,13 +1,13 @@
 """Core vintage selection and PIT logic."""
 
 from datetime import date, datetime
-from typing import Optional, List, Union
+
 import pandas as pd
 
 
 def select_vintage_for_asof(
-    vintages: List[Union[date, datetime, pd.Timestamp]], asof_date: Union[date, datetime, pd.Timestamp]
-) -> Optional[Union[date, datetime, pd.Timestamp]]:
+    vintages: list[date | datetime | pd.Timestamp], asof_date: date | datetime | pd.Timestamp
+) -> date | datetime | pd.Timestamp | None:
     """
     Select the appropriate vintage for a given asof_date.
     
@@ -59,7 +59,7 @@ def select_vintage_for_asof(
     return selected_original
 
 
-def _normalize_date(d: Union[date, datetime, pd.Timestamp]) -> pd.Timestamp:
+def _normalize_date(d: date | datetime | pd.Timestamp) -> pd.Timestamp:
     """Normalize date to pd.Timestamp for comparison."""
     if isinstance(d, pd.Timestamp):
         # Remove timezone for date comparison if present
@@ -70,8 +70,8 @@ def _normalize_date(d: Union[date, datetime, pd.Timestamp]) -> pd.Timestamp:
 
 
 def validate_no_lookahead(
-    vintage_date: Union[date, datetime, pd.Timestamp],
-    asof_date: Union[date, datetime, pd.Timestamp]
+    vintage_date: date | datetime | pd.Timestamp,
+    asof_date: date | datetime | pd.Timestamp
 ) -> bool:
     """
     Validate that vintage_date does not create lookahead bias.

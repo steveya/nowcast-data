@@ -1,15 +1,13 @@
 from datetime import date
 
 import pandas as pd
-import pytest
 
-pytest.importorskip("alphaforge")
-from nowcast_data.models.target_policy import (  # noqa: E402
+from nowcast_data.models.target_policy import (
     TargetPolicy,
     list_quarterly_target_releases_asof,
     resolve_target_from_releases,
 )
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
 
 
 def test_latest_available_changes_with_asof(pit_context) -> None:

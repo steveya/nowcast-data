@@ -3,16 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
 try:
     import duckdb
 except ImportError:  # pragma: no cover - optional dependency
     duckdb = None
 
-pytest.importorskip("alphaforge")
-from alphaforge.data.context import DataContext  # noqa: E402
-from alphaforge.store.duckdb_parquet import DuckDBParquetStore  # noqa: E402
+from alphaforge.data.context import DataContext
+from alphaforge.store.duckdb_parquet import DuckDBParquetStore
 
 from nowcast_data.benchmark.manifest import MANIFEST_PATH, load_manifest
 

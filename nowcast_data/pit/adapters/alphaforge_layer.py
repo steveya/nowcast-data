@@ -4,13 +4,8 @@ from datetime import date
 from typing import Optional
 
 import pandas as pd
-try:  # pragma: no cover - optional dependency
-    from alphaforge.data.context import DataContext
-    from alphaforge.time.ref_period import RefPeriod, RefFreq
-except ImportError:  # pragma: no cover - optional dependency
-    DataContext = None  # type: ignore[assignment]
-    RefPeriod = None  # type: ignore[assignment]
-    RefFreq = None  # type: ignore[assignment]
+from alphaforge.data.context import DataContext
+from alphaforge.time.ref_period import RefPeriod, RefFreq
 
 
 def _coerce_utc_timestamp(value: date | pd.Timestamp) -> pd.Timestamp:
@@ -30,8 +25,6 @@ class AlphaForgePITLayer:
     """Wrapper for AlphaForge PIT accessors."""
 
     def __init__(self, ctx: DataContext) -> None:
-        if DataContext is None or RefPeriod is None:
-            raise ImportError("alphaforge must be installed to use AlphaForgePITLayer")
         if ctx.pit is None:
             raise ValueError("PIT requires DuckDBParquetStore-backed DataContext")
         self._ctx = ctx
