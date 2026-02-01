@@ -83,14 +83,11 @@ class QuarterlyFeatureBuilder(BaseEstimator, TransformerMixin):
                 recipe = get_recipe(series_key)
                 series = sorted_group[series_key]
 
-                if recipe.level:
-                    features[f"{series_key}__level"] = series
+                features[f"{series_key}__level"] = series
 
                 qoq, yoy = self._compute_changes(series, recipe.change)
-                if recipe.qoq:
-                    features[f"{series_key}__qoq"] = qoq
-                if recipe.yoy:
-                    features[f"{series_key}__yoy"] = yoy
+                features[f"{series_key}__qoq"] = qoq
+                features[f"{series_key}__yoy"] = yoy
                 if self.add_availability_flags:
                     features[f"{series_key}__isna"] = series.isna().astype(int)
 

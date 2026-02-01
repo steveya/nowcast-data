@@ -512,12 +512,16 @@ def main() -> None:
             else:
                 n_raw_predictors_present_train = 0
 
-            test_row = panel[
+            test_rows = panel[
                 (panel["asof_date"] == asof_date) & (panel["ref_offset"] == ref_offset)
             ]
-            if test_row.empty:
-                continue
-            test_row = test_row.iloc[0]
+            if len(test_rows) != 1:
+                raise ValueError(
+                    "Expected exactly one test row for "
+                    f"asof_date={asof_date} ref_offset={ref_offset}; "
+                    f"found {len(test_rows)}"
+                )
+            test_row = test_rows.iloc[0]
 
             X_train, X_test, base_cols = build_model_matrices(
                 history_offset=history_offset,
@@ -530,6 +534,11 @@ def main() -> None:
                     f"(train={len(X_train.index)} history={len(history_offset.index)})"
                 )
             y_train = history_offset.loc[X_train.index, "y_final_3rd_growth"]
+            if not X_train.index.equals(y_train.index):
+                raise ValueError(
+                    "X_train index mismatch with y_train "
+                    f"(train={len(X_train.index)} y_train={len(y_train.index)})"
+                )
 
             # Pipeline structure is fully determined by model choice, alphas, and predictor list.
             pipe_key = (
