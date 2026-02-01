@@ -213,7 +213,7 @@ def _format_invariant_error(
     examples: str,
 ) -> str:
     return (
-        "Inconsistent y_final_3rd_level across vintages for ref_quarter(s): "
+        "Inconsistent y_final_3rd_level across vintages for reference_quarter(s): "
         f"{bad_quarters} (showing {len(bad_quarters)} of {total_bad}). "
         f"Summary:\n{summary}\nExamples:\n{examples}"
     )
@@ -512,7 +512,6 @@ def main() -> None:
         grouped_stats = third_release_data.groupby("ref_quarter")["y_final_3rd_level"].agg(
             min_value="min",
             max_value="max",
-            mean_value="mean",
         )
         spread = grouped_stats["max_value"] - grouped_stats["min_value"]
         scale = grouped_stats[["min_value", "max_value"]].abs().max(axis=1)
