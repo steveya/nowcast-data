@@ -3,9 +3,11 @@ from __future__ import annotations
 from datetime import date
 
 import pandas as pd
+import pytest
 
-from alphaforge.time.ref_period import RefFreq
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
+pytest.importorskip("alphaforge")
+from alphaforge.time.ref_period import RefFreq  # noqa: E402
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
 
 
 def test_snapshot_ref_ranges(pit_context) -> None:

@@ -3,9 +3,11 @@ from __future__ import annotations
 from datetime import date
 
 import pandas as pd
+import pytest
 
-from alphaforge.data.context import DataContext
-from alphaforge.store.duckdb_parquet import DuckDBParquetStore
+pytest.importorskip("alphaforge")
+from alphaforge.data.context import DataContext  # noqa: E402
+from alphaforge.store.duckdb_parquet import DuckDBParquetStore  # noqa: E402
 
 from nowcast_data.benchmark.pit_builder import (
     SeriesSpec,

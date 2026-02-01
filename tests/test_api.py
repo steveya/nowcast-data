@@ -1,9 +1,12 @@
 from datetime import date
 from pathlib import Path
 
-from nowcast_data.pit.api import PITDataManager
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
-from nowcast_data.pit.core.catalog import SeriesCatalog
+import pytest
+
+pytest.importorskip("alphaforge")
+from nowcast_data.pit.api import PITDataManager  # noqa: E402
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
+from nowcast_data.pit.core.catalog import SeriesCatalog  # noqa: E402
 
 
 def test_get_series_asof_with_alphaforge_adapter(pit_context, monkeypatch) -> None:

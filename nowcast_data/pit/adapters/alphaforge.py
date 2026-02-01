@@ -6,9 +6,15 @@ from datetime import date, datetime
 from typing import List, Optional
 
 import pandas as pd
-from alphaforge.data.context import DataContext
-from alphaforge.data.query import Query
-from alphaforge.time.ref_period import RefPeriod, RefFreq
+try:  # pragma: no cover - optional dependency
+    from alphaforge.data.context import DataContext
+    from alphaforge.data.query import Query
+    from alphaforge.time.ref_period import RefPeriod, RefFreq
+except ImportError:  # pragma: no cover - optional dependency
+    DataContext = None  # type: ignore[assignment]
+    Query = None  # type: ignore[assignment]
+    RefPeriod = None  # type: ignore[assignment]
+    RefFreq = None  # type: ignore[assignment]
 
 from nowcast_data.pit.adapters.base import PITAdapter
 from nowcast_data.pit.adapters.alphaforge_layer import AlphaForgePITLayer
@@ -40,6 +46,8 @@ class AlphaForgePITAdapter(PITAdapter):
     """Point-in-time data adapter for AlphaForge."""
 
     def __init__(self, ctx: DataContext):
+        if DataContext is None or RefPeriod is None or Query is None:
+            raise ImportError("alphaforge must be installed to use AlphaForgePITAdapter")
         self._ctx = ctx
         self._layer = AlphaForgePITLayer(ctx)
 

@@ -3,8 +3,10 @@ from __future__ import annotations
 from datetime import date
 
 import pandas as pd
+import pytest
 
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
+pytest.importorskip("alphaforge")
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
 
 
 def test_list_pit_observations_asof(pit_context) -> None:

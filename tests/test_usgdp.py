@@ -2,9 +2,12 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
-from nowcast_data.pit.api import PITDataManager
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
-from nowcast_data.pit.core.catalog import SeriesCatalog
+import pytest
+
+pytest.importorskip("alphaforge")
+from nowcast_data.pit.api import PITDataManager  # noqa: E402
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
+from nowcast_data.pit.core.catalog import SeriesCatalog  # noqa: E402
 
 
 
