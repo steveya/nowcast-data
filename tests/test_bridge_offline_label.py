@@ -7,18 +7,12 @@ from datetime import date
 import pandas as pd
 import pytest
 
-from nowcast_data.models.bridge import BridgeConfig, BridgeNowcaster
-
-try:
-    from alphaforge.time.ref_period import RefFreq
-    from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
-
-    HAS_ALPHAFORGE = True
-except ImportError:
-    HAS_ALPHAFORGE = False
+pytest.importorskip("alphaforge")
+from nowcast_data.models.bridge import BridgeConfig, BridgeNowcaster  # noqa: E402
+from alphaforge.time.ref_period import RefFreq  # noqa: E402
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
 
 
-@pytest.mark.skipif(not HAS_ALPHAFORGE, reason="alphaforge not installed")
 def test_bridge_nowcaster_offline_label_smoke(pit_context) -> None:
     """Test that BridgeNowcaster works with offline labels."""
     adapter = AlphaForgePITAdapter(ctx=pit_context)
@@ -41,7 +35,6 @@ def test_bridge_nowcaster_offline_label_smoke(pit_context) -> None:
     assert "y_true_final" in result
 
 
-@pytest.mark.skipif(not HAS_ALPHAFORGE, reason="alphaforge not installed")
 def test_bridge_nowcaster_online_label_smoke(pit_context) -> None:
     """Test that BridgeNowcaster works with online labels (default)."""
     adapter = AlphaForgePITAdapter(ctx=pit_context)
@@ -63,7 +56,6 @@ def test_bridge_nowcaster_online_label_smoke(pit_context) -> None:
     assert "y_true_asof" in result
 
 
-@pytest.mark.skipif(not HAS_ALPHAFORGE, reason="alphaforge not installed")
 def test_bridge_nowcaster_offline_label_requires_eval_date(pit_context) -> None:
     """Test that offline label requires evaluation_asof_date."""
     adapter = AlphaForgePITAdapter(ctx=pit_context)
@@ -83,7 +75,6 @@ def test_bridge_nowcaster_offline_label_requires_eval_date(pit_context) -> None:
         nowcaster.fit_predict_one(date(2025, 1, 15))
 
 
-@pytest.mark.skipif(not HAS_ALPHAFORGE, reason="alphaforge not installed")
 def test_bridge_nowcaster_no_lookahead_offline(pit_context) -> None:
     """Test that offline label training excludes current and future quarters."""
     adapter = AlphaForgePITAdapter(ctx=pit_context)

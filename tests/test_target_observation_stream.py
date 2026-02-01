@@ -1,9 +1,11 @@
 from datetime import date
 
 import pandas as pd
+import pytest
 
-from nowcast_data.models.target_policy import get_quarterly_release_observation_stream
-from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter
+pytest.importorskip("alphaforge")
+from nowcast_data.models.target_policy import get_quarterly_release_observation_stream  # noqa: E402
+from nowcast_data.pit.adapters.alphaforge import AlphaForgePITAdapter  # noqa: E402
 
 
 def test_quarterly_release_observation_stream_ranks(pit_context) -> None:

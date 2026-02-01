@@ -26,6 +26,7 @@ import json
 from dataclasses import asdict
 from datetime import date
 from pathlib import Path
+from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 from sklearn.base import clone
@@ -469,23 +470,16 @@ def main() -> None:
         return group
 
     panel = panel.groupby("asof_date", group_keys=False).apply(_add_asof_latest_growth)
-    # Median aggregation avoids reliance on a single vintage when building stable truth.
-    quarter_end_map = panel[["ref_quarter", "ref_quarter_end"]].drop_duplicates(
-        subset=["ref_quarter"]
-    )
+    # Median aggregation smooths across vintages; ref_quarter_end is derived deterministically
+    # from ref_quarter.
     stable = (
-        panel[["ref_quarter", "ref_quarter_end", "y_final_3rd_level"]]
+        panel[["ref_quarter", "y_final_3rd_level"]]
         .dropna(subset=["y_final_3rd_level"])
         .groupby("ref_quarter", as_index=False)["y_final_3rd_level"]
         .median()
-        .merge(
-            quarter_end_map,
-            on="ref_quarter",
-            how="left",
-        )
-        .sort_values("ref_quarter_end")
     )
-    # Median aggregation smooths across vintages, even if the exact value never appeared.
+    stable["ref_quarter_end"] = stable["ref_quarter"].map(_quarter_end_for_ref)
+    stable = stable.sort_values("ref_quarter_end")
     stable["y_final_3rd_growth"] = compute_gdp_qoq_saar(stable["y_final_3rd_level"])
     panel = panel.merge(
         stable[["ref_quarter", "y_final_3rd_growth"]],
@@ -496,7 +490,7 @@ def main() -> None:
 
     alphas = [float(x.strip()) for x in args.alphas.split(",") if x.strip()]
 
-    pipeline_cache: dict[str, Pipeline] = {}
+    pipeline_cache: dict[tuple[Any, ...], Pipeline] = {}
     predictions: list[dict] = []
     for asof_date in sorted(panel["asof_date"].unique()):
         history = panel[panel["asof_date"] < asof_date]
@@ -528,10 +522,20 @@ def main() -> None:
                 test_row=test_row,
                 predictor_keys=predictor_keys,
             )
-            y_train = history_offset["y_final_3rd_growth"]
+            if not X_train.index.equals(history_offset.index):
+                raise ValueError(
+                    "X_train index mismatch with history_offset "
+                    f"(train={len(X_train.index)} history={len(history_offset.index)})"
+                )
+            y_train = history_offset.loc[X_train.index, "y_final_3rd_growth"]
 
             # Pipeline structure is fully determined by model choice, alphas, and predictor list.
-            pipe_key = ("pipeline_v1", args.model, tuple(alphas), tuple(predictor_keys))
+            pipe_key = (
+                "pipeline_v1",
+                args.model,
+                tuple(alphas),
+                tuple(predictor_keys),
+            )
             if pipe_key not in pipeline_cache:
                 pipeline_cache[pipe_key] = make_pipeline(args.model, predictor_keys, alphas)
             pipe = clone(pipeline_cache[pipe_key])
@@ -615,6 +619,8 @@ def main() -> None:
         "feature_pipeline": describe_pipeline(pipeline_for_metadata),
         "recipe_registry_version": "recipes_v1",
         "level_anchor_policy": "real_time_only",
+        "stable_truth_policy": "median_across_vintages",
+        "stable_truth_release": "nth_release_3",
         "n_raw_predictors_expected": int(len(predictor_keys)),
         "feature_schema": {
             "base_cols": metadata_base_cols,
