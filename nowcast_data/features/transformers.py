@@ -72,20 +72,16 @@ class QuarterlyFeatureBuilder(BaseEstimator, TransformerMixin):
             )
 
         feature_blocks: list[pd.DataFrame] = []
+        predictor_set = set(self.predictor_keys)
         for _, group in X.groupby(self.group_col):
             original_index = group.index
             sorted_group = group.sort_values(self.time_col)
             passthrough_cols = [
                 c
                 for c in sorted_group.columns
-                if c not in {self.time_col, self.group_col}
-                and c not in set(self.predictor_keys)
+                if c not in {self.time_col, self.group_col} and c not in predictor_set
             ]
-            passthrough = (
-                sorted_group[passthrough_cols].copy()
-                if passthrough_cols
-                else pd.DataFrame(index=sorted_group.index)
-            )
+            passthrough = sorted_group[passthrough_cols].copy()
             features = pd.DataFrame(index=sorted_group.index)
 
             for series_key in self.predictor_keys:
