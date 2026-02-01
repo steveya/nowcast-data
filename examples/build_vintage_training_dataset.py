@@ -64,6 +64,7 @@ ABSOLUTE_TOLERANCE = 1e-10
 MAX_VIOLATION_QUARTERS = 3
 # Max number of example rows per quarter in invariant violation summaries.
 MAX_VIOLATION_ROWS = 3
+RT_FEATURE_COLS = ["y_asof_latest_growth", "y_asof_latest_level"]
 
 
 def _compute_metrics(df: pd.DataFrame, *, pred_col: str, truth_col: str) -> dict:
@@ -240,7 +241,7 @@ def describe_pipeline(pipe: Pipeline) -> str:
 
 
 def build_base_cols(predictor_keys: list[str]) -> list[str]:
-    return [*predictor_keys, "asof_date", "ref_quarter_end"]
+    return [*predictor_keys, *RT_FEATURE_COLS, "asof_date", "ref_quarter_end"]
 
 
 def build_model_matrices(
@@ -704,6 +705,8 @@ def main() -> None:
         "stable_truth_policy": "third_release_first_observed",
         "stable_truth_release": "nth_release_3",
         "stable_truth_first_observed_asof_col": "first_release_asof_date",
+        "real_time_feature_cols": RT_FEATURE_COLS,
+        "uses_real_time_as_feature": True,
         "n_raw_predictors_expected": int(len(predictor_keys)),
         "feature_schema": {
             "base_cols": metadata_base_cols,
