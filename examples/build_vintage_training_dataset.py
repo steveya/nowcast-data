@@ -519,7 +519,7 @@ def main() -> None:
                 raise ValueError(
                     "Expected exactly one test row for "
                     f"asof_date={asof_date} ref_offset={ref_offset}; "
-                    f"found {len(test_rows)}. Check for missing or duplicate panel rows."
+                    f"found {len(test_rows)}. Check panel rows for this vintage/offset."
                 )
             test_row = test_rows.iloc[0]
 
@@ -535,10 +535,13 @@ def main() -> None:
                 )
             y_train = history_offset.loc[X_train.index, "y_final_3rd_growth"]
             if not X_train.index.equals(y_train.index):
+                missing_in_y = list(X_train.index.difference(y_train.index)[:5])
+                missing_in_x = list(y_train.index.difference(X_train.index)[:5])
                 raise ValueError(
                     "X_train index mismatch with y_train "
                     f"(train={len(X_train.index)} y_train={len(y_train.index)}). "
-                    "Check for filtering or alignment issues in history_offset."
+                    "Check for filtering or alignment issues in history_offset. "
+                    f"missing_in_y[:5]={missing_in_y} missing_in_x[:5]={missing_in_x}"
                 )
 
             # Pipeline structure is fully determined by model choice, alphas, and predictor list.
