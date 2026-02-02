@@ -223,7 +223,7 @@ def run_backtest(
         feature_cols = [col for col in feature_cols if col not in config.real_time_feature_cols]
 
     if config.training_label_mode == "revision" and config.label != "y_final":
-        raise ValueError("training_label_mode='revision' requires label='y_final'")
+        raise ValueError("training_label_mode='revision' requires config.label='y_final'")
 
     # Determine label column
     label_col = config.label  # "y_asof_latest" or "y_final"
