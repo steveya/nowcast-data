@@ -259,6 +259,8 @@ def run_backtest(
                     else ""
                 ),
                 "y_pred": np.nan,
+                "y_pred_stable": np.nan,
+                "y_pred_revision": np.nan,
                 "y_true_asof_latest": (
                     xy_panel.loc[test_vintage, "y_asof_latest"]
                     if "y_asof_latest" in xy_panel.columns
@@ -267,6 +269,16 @@ def run_backtest(
                 "y_true_final": (
                     xy_panel.loc[test_vintage, "y_final"]
                     if "y_final" in xy_panel.columns
+                    else np.nan
+                ),
+                "y_true_stable": (
+                    xy_panel.loc[test_vintage, config.stable_label_col]
+                    if config.stable_label_col in xy_panel.columns
+                    else np.nan
+                ),
+                "y_true_real_time": (
+                    xy_panel.loc[test_vintage, config.real_time_label_col]
+                    if config.real_time_label_col in xy_panel.columns
                     else np.nan
                 ),
                 "label_used": label_col,
@@ -309,6 +321,8 @@ def run_backtest(
                     else ""
                 ),
                 "y_pred": np.nan,
+                "y_pred_stable": np.nan,
+                "y_pred_revision": np.nan,
                 "y_true_asof_latest": (
                     xy_panel.loc[test_vintage, "y_asof_latest"]
                     if "y_asof_latest" in xy_panel.columns
@@ -317,6 +331,16 @@ def run_backtest(
                 "y_true_final": (
                     xy_panel.loc[test_vintage, "y_final"]
                     if "y_final" in xy_panel.columns
+                    else np.nan
+                ),
+                "y_true_stable": (
+                    xy_panel.loc[test_vintage, config.stable_label_col]
+                    if config.stable_label_col in xy_panel.columns
+                    else np.nan
+                ),
+                "y_true_real_time": (
+                    xy_panel.loc[test_vintage, config.real_time_label_col]
+                    if config.real_time_label_col in xy_panel.columns
                     else np.nan
                 ),
                 "label_used": label_col,
@@ -399,6 +423,10 @@ def run_backtest(
     if df.empty:
         return df, {"rmse": np.nan, "mae": np.nan, "count": 0}
 
+    for col in ["y_pred_stable", "y_pred_revision", "y_true_stable", "y_true_real_time"]:
+        if col not in df.columns:
+            df[col] = np.nan
+
     # Add y_true and error columns based on label_used
     df["y_true"] = (
         df[f"y_true_{label_col.replace('y_', '')}"]
@@ -433,13 +461,13 @@ def run_backtest(
 
     if config.compute_metrics:
         metrics["stable_vs_final_3rd_growth"] = _compute_metrics(
-            df, pred_col="y_pred_stable", truth_col=config.stable_label_col
+            df, pred_col="y_pred_stable", truth_col="y_true_stable"
         )
         metrics["stable_vs_real_time_growth"] = _compute_metrics(
-            df, pred_col="y_pred_stable", truth_col=config.real_time_label_col
+            df, pred_col="y_pred_stable", truth_col="y_true_real_time"
         )
         if config.training_label_mode == "revision":
-            df["y_true_revision"] = df[config.stable_label_col] - df[config.real_time_label_col]
+            df["y_true_revision"] = df["y_true_stable"] - df["y_true_real_time"]
             metrics["revision_metrics"] = _compute_metrics(
                 df, pred_col="y_pred_revision", truth_col="y_true_revision"
             )

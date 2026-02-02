@@ -82,16 +82,18 @@ def test_bridge_revision_mode_reconstructs_stable_prediction(pit_context) -> Non
         predictor_series_keys=["P1", "P2"],
         agg_spec={"P1": "mean", "P2": "mean"},
         min_train_quarters=2,
-        label="y_asof_latest",
+        label="y_final",
+        evaluation_asof_date=date(2025, 6, 1),
         training_label_mode="revision",
     )
     nowcaster = BridgeNowcaster(config, adapter)
 
     result = nowcaster.fit_predict_one(asof_date)
-    if pd.notna(result["y_pred_revision"]) and pd.notna(result["y_true_asof"]):
+    real_time_value = result.get("y_true_real_time", result.get("y_true_asof"))
+    if pd.notna(result["y_pred_revision"]) and pd.notna(real_time_value):
         assert np.isclose(
             result["y_pred_stable"],
-            result["y_pred_revision"] + result["y_true_asof"],
+            result["y_pred_revision"] + real_time_value,
             rtol=1e-6,
             atol=1e-8,
         )

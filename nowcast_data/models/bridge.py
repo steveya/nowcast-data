@@ -350,6 +350,8 @@ class BridgeNowcaster:
                 "ref_quarter": str(current_ref),
                 "y_true_asof": np.nan,
                 "y_true_final": np.nan,
+                "y_true_stable": np.nan,
+                "y_true_real_time": np.nan,
                 "y_pred": np.nan,
                 "y_pred_stable": np.nan,
                 "y_pred_revision": np.nan,
@@ -390,7 +392,6 @@ class BridgeNowcaster:
                 "y",
                 "y_asof_latest",
                 "y_final",
-                "y_asof_latest_level",
                 "y_final_3rd_level",
                 self.config.stable_label_col,
             ]
@@ -511,6 +512,8 @@ class BridgeNowcaster:
         # Get ground truth values
         y_true_asof = np.nan
         y_true_final = np.nan
+        y_true_stable = np.nan
+        y_true_real_time = np.nan
 
         if self.config.label == "y_asof_latest":
             y_true_asof = (
@@ -523,11 +526,20 @@ class BridgeNowcaster:
             if "y_final" in dataset.columns and current_quarter in dataset.index:
                 y_true_final = dataset.loc[current_quarter, "y_final"]
 
+        if self.config.stable_label_col in dataset.columns and current_quarter in dataset.index:
+            y_true_stable = dataset.loc[current_quarter, self.config.stable_label_col]
+        if self.config.real_time_label_col in dataset.columns and current_quarter in dataset.index:
+            y_true_real_time = dataset.loc[current_quarter, self.config.real_time_label_col]
+
         return {
             "asof_date": asof_date,
             "ref_quarter": str(current_ref),
             "y_true_asof": y_true_asof,
             "y_true_final": y_true_final,
+            "y_true_stable": np.nan,
+            "y_true_real_time": np.nan,
+            "y_true_stable": y_true_stable,
+            "y_true_real_time": y_true_real_time,
             "y_pred": y_pred_raw,
             "y_pred_stable": y_pred_stable,
             "y_pred_revision": y_pred_revision,
