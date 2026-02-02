@@ -103,7 +103,7 @@ class TestBacktestConfig:
 class TestRunBacktest:
     """Tests for run_backtest function."""
 
-def test_backtest_smoke_test(self, pit_context) -> None:
+    def test_backtest_smoke_test(self, pit_context) -> None:
         """Smoke test: run_backtest returns DataFrame and metrics with expected structure."""
         config = BacktestConfig(
             target_series_key="BASE_GDP",
