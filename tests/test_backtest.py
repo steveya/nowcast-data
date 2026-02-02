@@ -103,7 +103,7 @@ class TestBacktestConfig:
 class TestRunBacktest:
     """Tests for run_backtest function."""
 
-    def test_backtest_smoke_test(self, pit_context) -> None:
+def test_backtest_smoke_test(self, pit_context) -> None:
         """Smoke test: run_backtest returns DataFrame and metrics with expected structure."""
         config = BacktestConfig(
             target_series_key="BASE_GDP",
@@ -132,6 +132,8 @@ class TestRunBacktest:
         assert "rmse" in metrics
         assert "mae" in metrics
         assert "count" in metrics
+        assert "stable_vs_final_3rd_growth" in metrics
+        assert "stable_vs_real_time_growth" in metrics
 
     def test_backtest_walk_forward_train_sizes(self, pit_context) -> None:
         """Test that n_train increases in walk-forward fashion."""

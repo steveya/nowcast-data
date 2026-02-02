@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression, RidgeCV
 
-from nowcast_data.features import QuarterlyFeatureBuilder
+from nowcast_data.features import QuarterlyFeatureBuilder, compute_gdp_qoq_saar
 from nowcast_data.pit.adapters.base import PITAdapter
 from nowcast_data.pit.api import PITDataManager
 from nowcast_data.pit.core.catalog import SeriesCatalog
@@ -240,7 +240,7 @@ def build_rt_quarterly_dataset(
     dataset = predictor_frame.copy()
     dataset["y"] = target_quarters
     dataset["y_asof_latest_level"] = target_quarters
-    dataset["y_asof_latest_growth"] = dataset["y_asof_latest_level"].pct_change(1) * 100.0
+    dataset["y_asof_latest_growth"] = compute_gdp_qoq_saar(dataset["y_asof_latest_level"])
     dataset["ref_quarter_end"] = pd.PeriodIndex(dataset.index, freq="Q").end_time
     dataset["asof_date"] = pd.to_datetime(asof_date)
     dataset.index.name = "ref_quarter"
@@ -286,6 +286,9 @@ class BridgeNowcaster:
         """
         current_ref = infer_current_quarter(asof_date)
         current_quarter = pd.Period(str(current_ref), freq="Q")
+
+        if self.config.training_label_mode == "revision" and self.config.label != "y_final":
+            raise ValueError("training_label_mode='revision' requires label='y_final'")
 
         if self.config.label == "y_asof_latest":
             # Online label: use build_rt_quarterly_dataset with latest values
@@ -361,6 +364,7 @@ class BridgeNowcaster:
                     if self.config.training_label_mode == "revision"
                     else "direct"
                 ),
+                "feature_cols": [],
                 "n_train": 0,
                 "n_features": 0,
                 "alpha_selected": np.nan,
@@ -371,12 +375,13 @@ class BridgeNowcaster:
 
         if self.config.label == "y_final":
             dataset = dataset.copy()
-            dataset["y_final_3rd_growth"] = dataset["y_final_3rd_growth"].fillna(
-                dataset.get("y_final")
-            )
-            dataset["y_asof_latest_growth"] = dataset["y_asof_latest_growth"].fillna(
-                dataset.get("y_asof_latest")
-            )
+            if self.config.stable_label_col not in dataset.columns and "y_final" in dataset.columns:
+                dataset[self.config.stable_label_col] = dataset["y_final"]
+            if (
+                self.config.real_time_label_col not in dataset.columns
+                and "y_asof_latest" in dataset.columns
+            ):
+                dataset[self.config.real_time_label_col] = dataset["y_asof_latest"]
 
         time_cols = [col for col in ["asof_date", "ref_quarter_end"] if col in dataset.columns]
         base_cols_to_drop = [
@@ -387,21 +392,22 @@ class BridgeNowcaster:
                 "y_final",
                 "y_asof_latest_level",
                 "y_final_3rd_level",
+                self.config.stable_label_col,
             ]
             if col in dataset.columns
         ]
 
         pre_features = dataset.drop(columns=base_cols_to_drop)
         pre_features = pre_features.reset_index(drop=False)
+        ref_quarter_col = pre_features["ref_quarter"]
+        feature_input = pre_features.drop(columns=["ref_quarter"], errors="ignore")
         feature_builder = QuarterlyFeatureBuilder(
             predictor_keys=self.config.predictor_series_keys,
             time_col="ref_quarter_end",
             group_col="asof_date",
         )
-        engineered = feature_builder.transform(pre_features)
-        predictors = pd.concat([pre_features[["ref_quarter"]], engineered], axis=1).set_index(
-            "ref_quarter"
-        )
+        engineered = feature_builder.transform(feature_input)
+        predictors = pd.concat([ref_quarter_col, engineered], axis=1).set_index("ref_quarter")
         predictors = predictors.drop(columns=time_cols, errors="ignore")
 
         if (
@@ -410,10 +416,23 @@ class BridgeNowcaster:
         ):
             predictors = predictors.drop(columns=self.config.real_time_feature_cols, errors="ignore")
 
-        if self.config.training_label_mode == "revision":
-            target = dataset[self.config.stable_label_col] - dataset[self.config.real_time_label_col]
+        if self.config.label == "y_asof_latest":
+            target = dataset[label_column]
         else:
-            target = dataset[self.config.stable_label_col]
+            stable_col = (
+                self.config.stable_label_col
+                if self.config.stable_label_col in dataset.columns
+                else label_column
+            )
+            real_time_col = (
+                self.config.real_time_label_col
+                if self.config.real_time_label_col in dataset.columns
+                else "y_asof_latest"
+            )
+            if self.config.training_label_mode == "revision":
+                target = dataset[stable_col] - dataset[real_time_col]
+            else:
+                target = dataset[stable_col]
 
         train_mask = predictors.index < current_quarter
         train_X = predictors.loc[train_mask].copy()
@@ -455,6 +474,7 @@ class BridgeNowcaster:
                     if self.config.training_label_mode == "revision"
                     else "direct"
                 ),
+                "feature_cols": train_X_clean.columns.tolist(),
                 "n_train": len(train_y_clean),
                 "n_features": train_X_clean.shape[1],
                 "alpha_selected": np.nan,
@@ -522,6 +542,7 @@ class BridgeNowcaster:
                 if self.config.training_label_mode == "revision"
                 else "direct"
             ),
+            "feature_cols": train_X_clean.columns.tolist(),
             "n_train": len(train_y_clean),
             "n_features": train_X_clean.shape[1],
             "alpha_selected": alpha_selected,

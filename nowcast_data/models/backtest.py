@@ -23,6 +23,17 @@ from nowcast_data.pit.api import PITDataManager
 from nowcast_data.pit.core.catalog import SeriesCatalog
 
 
+def _compute_metrics(df: pd.DataFrame, *, pred_col: str, truth_col: str) -> dict:
+    use = df[df[pred_col].notna() & df[truth_col].notna()].copy()
+    if use.empty:
+        return {"rmse": np.nan, "mae": np.nan, "count": 0}
+
+    err = use[pred_col] - use[truth_col]
+    rmse = float(np.sqrt(np.mean(err**2)))
+    mae = float(np.mean(np.abs(err)))
+    return {"rmse": rmse, "mae": mae, "count": int(len(use))}
+
+
 def make_vintage_dates(
     start_date: date, end_date: date, freq: Literal["D", "W", "B"]
 ) -> list[date]:
@@ -210,6 +221,9 @@ def run_backtest(
 
     if not config.use_real_time_target_as_feature and config.real_time_feature_cols:
         feature_cols = [col for col in feature_cols if col not in config.real_time_feature_cols]
+
+    if config.training_label_mode == "revision" and config.label != "y_final":
+        raise ValueError("training_label_mode='revision' requires label='y_final'")
 
     # Determine label column
     label_col = config.label  # "y_asof_latest" or "y_final"
