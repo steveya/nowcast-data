@@ -288,7 +288,7 @@ class BridgeNowcaster:
         current_quarter = pd.Period(str(current_ref), freq="Q")
 
         if self.config.training_label_mode == "revision" and self.config.label != "y_final":
-            raise ValueError("training_label_mode='revision' requires label='y_final'")
+            raise ValueError("training_label_mode='revision' requires config.label='y_final'")
 
         if self.config.label == "y_asof_latest":
             # Online label: use build_rt_quarterly_dataset with latest values
