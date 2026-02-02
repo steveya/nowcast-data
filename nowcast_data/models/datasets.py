@@ -7,6 +7,8 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
+from nowcast_data.features import compute_gdp_qoq_saar
+from nowcast_data.models.target_policy import quarter_end_date
 from nowcast_data.models.utils import (
     agg_series,
     apply_quarter_cutoff,
@@ -278,6 +280,13 @@ def build_vintage_training_dataset(
 
     dataset["y_asof_latest"] = pd.Series(y_asof_values, index=desired_index, dtype="float64")
     dataset["y_final"] = pd.Series(y_final_values, index=desired_index, dtype="float64")
+    ref_quarter_end = desired_index.map(lambda quarter: quarter_end_date(str(quarter)))
+    dataset["ref_quarter_end"] = pd.to_datetime(ref_quarter_end)
+    dataset["asof_date"] = pd.to_datetime(asof_date)
+    dataset["y_asof_latest_level"] = dataset["y_asof_latest"]
+    dataset["y_final_3rd_level"] = dataset["y_final"]
+    dataset["y_asof_latest_growth"] = compute_gdp_qoq_saar(dataset["y_asof_latest_level"])
+    dataset["y_final_3rd_growth"] = compute_gdp_qoq_saar(dataset["y_final_3rd_level"])
     dataset.index.name = "ref_quarter"
 
     meta = {

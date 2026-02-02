@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression, RidgeCV
 
+from nowcast_data.features import QuarterlyFeatureBuilder
 from nowcast_data.pit.adapters.base import PITAdapter
 from nowcast_data.pit.api import PITDataManager
 from nowcast_data.pit.core.catalog import SeriesCatalog
@@ -45,6 +46,13 @@ class BridgeConfig:
         default_factory=lambda: TargetPolicy(mode="latest_available", max_release_rank=3)
     )
     include_y_asof_latest_as_feature: bool = False
+    use_real_time_target_as_feature: bool = True
+    real_time_feature_cols: list[str] = field(
+        default_factory=lambda: ["y_asof_latest_growth", "y_asof_latest_level"]
+    )
+    training_label_mode: Literal["stable", "revision"] = "stable"
+    stable_label_col: str = "y_final_3rd_growth"
+    real_time_label_col: str = "y_asof_latest_growth"
 
 
 def build_rt_quarterly_dataset(
@@ -231,6 +239,10 @@ def build_rt_quarterly_dataset(
 
     dataset = predictor_frame.copy()
     dataset["y"] = target_quarters
+    dataset["y_asof_latest_level"] = target_quarters
+    dataset["y_asof_latest_growth"] = dataset["y_asof_latest_level"].pct_change(1) * 100.0
+    dataset["ref_quarter_end"] = pd.PeriodIndex(dataset.index, freq="Q").end_time
+    dataset["asof_date"] = pd.to_datetime(asof_date)
     dataset.index.name = "ref_quarter"
     return dataset, nobs_current, last_obs_date_current_quarter
 
@@ -336,7 +348,19 @@ class BridgeNowcaster:
                 "y_true_asof": np.nan,
                 "y_true_final": np.nan,
                 "y_pred": np.nan,
+                "y_pred_stable": np.nan,
+                "y_pred_revision": np.nan,
                 "label_used": label_used,
+                "training_label_mode": self.config.training_label_mode,
+                "uses_real_time_as_feature": self.config.use_real_time_target_as_feature,
+                "real_time_feature_cols": self.config.real_time_feature_cols,
+                "stable_label_col": self.config.stable_label_col,
+                "real_time_label_col": self.config.real_time_label_col,
+                "stable_pred_reconstruction": (
+                    "real_time_plus_revision"
+                    if self.config.training_label_mode == "revision"
+                    else "direct"
+                ),
                 "n_train": 0,
                 "n_features": 0,
                 "alpha_selected": np.nan,
@@ -345,20 +369,51 @@ class BridgeNowcaster:
                 "nobs_current": {},
             }
 
-        # Prepare features: drop label columns, keep predictors
-        # If using offline label and include_y_asof_latest_as_feature, keep y_asof_latest as predictor
-        cols_to_drop = [col for col in ["y", "y_asof_latest", "y_final"] if col in dataset.columns]
+        if self.config.label == "y_final":
+            dataset = dataset.copy()
+            dataset["y_final_3rd_growth"] = dataset["y_final_3rd_growth"].fillna(
+                dataset.get("y_final")
+            )
+            dataset["y_asof_latest_growth"] = dataset["y_asof_latest_growth"].fillna(
+                dataset.get("y_asof_latest")
+            )
+
+        time_cols = [col for col in ["asof_date", "ref_quarter_end"] if col in dataset.columns]
+        base_cols_to_drop = [
+            col
+            for col in [
+                "y",
+                "y_asof_latest",
+                "y_final",
+                "y_asof_latest_level",
+                "y_final_3rd_level",
+            ]
+            if col in dataset.columns
+        ]
+
+        pre_features = dataset.drop(columns=base_cols_to_drop)
+        pre_features = pre_features.reset_index(drop=False)
+        feature_builder = QuarterlyFeatureBuilder(
+            predictor_keys=self.config.predictor_series_keys,
+            time_col="ref_quarter_end",
+            group_col="asof_date",
+        )
+        engineered = feature_builder.transform(pre_features)
+        predictors = pd.concat([pre_features[["ref_quarter"]], engineered], axis=1).set_index(
+            "ref_quarter"
+        )
+        predictors = predictors.drop(columns=time_cols, errors="ignore")
 
         if (
-            self.config.label == "y_final"
-            and self.config.include_y_asof_latest_as_feature
-            and "y_asof_latest" in cols_to_drop
+            not self.config.use_real_time_target_as_feature
+            and self.config.real_time_feature_cols
         ):
-            # Keep y_asof_latest as a feature for offline mode
-            cols_to_drop.remove("y_asof_latest")
+            predictors = predictors.drop(columns=self.config.real_time_feature_cols, errors="ignore")
 
-        predictors = dataset.drop(columns=cols_to_drop)
-        target = dataset[label_column]
+        if self.config.training_label_mode == "revision":
+            target = dataset[self.config.stable_label_col] - dataset[self.config.real_time_label_col]
+        else:
+            target = dataset[self.config.stable_label_col]
 
         train_mask = predictors.index < current_quarter
         train_X = predictors.loc[train_mask].copy()
@@ -387,7 +442,19 @@ class BridgeNowcaster:
                 "y_true_asof": np.nan,
                 "y_true_final": np.nan,
                 "y_pred": np.nan,
+                "y_pred_stable": np.nan,
+                "y_pred_revision": np.nan,
                 "label_used": label_used,
+                "training_label_mode": self.config.training_label_mode,
+                "uses_real_time_as_feature": self.config.use_real_time_target_as_feature,
+                "real_time_feature_cols": self.config.real_time_feature_cols,
+                "stable_label_col": self.config.stable_label_col,
+                "real_time_label_col": self.config.real_time_label_col,
+                "stable_pred_reconstruction": (
+                    "real_time_plus_revision"
+                    if self.config.training_label_mode == "revision"
+                    else "direct"
+                ),
                 "n_train": len(train_y_clean),
                 "n_features": train_X_clean.shape[1],
                 "alpha_selected": np.nan,
@@ -401,15 +468,25 @@ class BridgeNowcaster:
         if self.config.model == "ridge":
             model = RidgeCV(alphas=self.config.alphas)
             model.fit(train_X_clean.to_numpy(), train_y_clean.to_numpy())
-            y_pred = float(model.predict(current_X.to_numpy().reshape(1, -1))[0])
+            y_pred_raw = float(model.predict(current_X.to_numpy().reshape(1, -1))[0])
             alpha_selected = float(model.alpha_)
         elif self.config.model == "ols":
             model = LinearRegression(fit_intercept=True)
             model.fit(train_X_clean.to_numpy(), train_y_clean.to_numpy())
-            y_pred = float(model.predict(current_X.to_numpy().reshape(1, -1))[0])
+            y_pred_raw = float(model.predict(current_X.to_numpy().reshape(1, -1))[0])
             alpha_selected = np.nan
         else:
             raise ValueError("model must be 'ridge' or 'ols'")
+
+        y_pred_stable = y_pred_raw
+        y_pred_revision = np.nan
+        if self.config.training_label_mode == "revision":
+            y_pred_revision = y_pred_raw
+            if self.config.real_time_label_col in dataset.columns:
+                rt_val = dataset.loc[current_quarter, self.config.real_time_label_col]
+                y_pred_stable = float(rt_val) + y_pred_revision if pd.notna(rt_val) else np.nan
+            else:
+                y_pred_stable = np.nan
 
         # Get ground truth values
         y_true_asof = np.nan
@@ -431,8 +508,20 @@ class BridgeNowcaster:
             "ref_quarter": str(current_ref),
             "y_true_asof": y_true_asof,
             "y_true_final": y_true_final,
-            "y_pred": y_pred,
+            "y_pred": y_pred_raw,
+            "y_pred_stable": y_pred_stable,
+            "y_pred_revision": y_pred_revision,
             "label_used": label_used,
+            "training_label_mode": self.config.training_label_mode,
+            "uses_real_time_as_feature": self.config.use_real_time_target_as_feature,
+            "real_time_feature_cols": self.config.real_time_feature_cols,
+            "stable_label_col": self.config.stable_label_col,
+            "real_time_label_col": self.config.real_time_label_col,
+            "stable_pred_reconstruction": (
+                "real_time_plus_revision"
+                if self.config.training_label_mode == "revision"
+                else "direct"
+            ),
             "n_train": len(train_y_clean),
             "n_features": train_X_clean.shape[1],
             "alpha_selected": alpha_selected,

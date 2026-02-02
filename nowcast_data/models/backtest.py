@@ -102,6 +102,13 @@ class BacktestConfig:
     standardize: bool = True
     max_nan_fraction: float = 0.5
     include_y_asof_latest_as_feature: bool = False
+    use_real_time_target_as_feature: bool = True
+    real_time_feature_cols: list[str] = field(
+        default_factory=lambda: ["y_asof_latest_growth", "y_asof_latest_level"]
+    )
+    training_label_mode: Literal["stable", "revision"] = "stable"
+    stable_label_col: str = "y_final_3rd_growth"
+    real_time_label_col: str = "y_asof_latest_growth"
     output_csv: str | None = None
     compute_metrics: bool = True
     ingest_from_ctx_source: bool = False
@@ -201,6 +208,9 @@ def run_backtest(
         xy_panel, include_y_asof_latest_as_feature=config.include_y_asof_latest_as_feature
     )
 
+    if not config.use_real_time_target_as_feature and config.real_time_feature_cols:
+        feature_cols = [col for col in feature_cols if col not in config.real_time_feature_cols]
+
     # Determine label column
     label_col = config.label  # "y_asof_latest" or "y_final"
 
@@ -265,6 +275,12 @@ def run_backtest(
             include_y_asof_latest_as_feature=config.include_y_asof_latest_as_feature,
         )
 
+        if config.training_label_mode == "revision":
+            train_y = (
+                xy_panel.loc[train_vintages, config.stable_label_col]
+                - xy_panel.loc[train_vintages, config.real_time_label_col]
+            )
+
         # Drop NaN labels from training
         valid_mask = train_y.notna()
         train_X_clean = train_X.loc[valid_mask]
@@ -315,6 +331,18 @@ def run_backtest(
         else:
             y_pred = float(model.predict(test_X.to_numpy().reshape(1, -1))[0])
 
+        y_pred_revision = np.nan
+        y_pred_stable = y_pred
+        if config.training_label_mode == "revision":
+            y_pred_revision = y_pred
+            if test_vintage in xy_panel.index:
+                rt_value = xy_panel.loc[test_vintage, config.real_time_label_col]
+                y_pred_stable = (
+                    float(rt_value) + y_pred_revision if pd.notna(rt_value) else np.nan
+                )
+            else:
+                y_pred_stable = np.nan
+
         # Build result row
         row = {
             "asof_date": test_vintage,
@@ -324,6 +352,8 @@ def run_backtest(
                 else ""
             ),
             "y_pred": y_pred,
+            "y_pred_stable": y_pred_stable,
+            "y_pred_revision": y_pred_revision,
             "y_true_asof_latest": (
                 xy_panel.loc[test_vintage, "y_asof_latest"]
                 if "y_asof_latest" in xy_panel.columns
@@ -332,7 +362,18 @@ def run_backtest(
             "y_true_final": (
                 xy_panel.loc[test_vintage, "y_final"] if "y_final" in xy_panel.columns else np.nan
             ),
+            "y_true_stable": (
+                xy_panel.loc[test_vintage, config.stable_label_col]
+                if config.stable_label_col in xy_panel.columns
+                else np.nan
+            ),
+            "y_true_real_time": (
+                xy_panel.loc[test_vintage, config.real_time_label_col]
+                if config.real_time_label_col in xy_panel.columns
+                else np.nan
+            ),
             "label_used": label_col,
+            "training_label_mode": config.training_label_mode,
             "n_train": len(train_y_clean),
             "n_features": train_X_clean.shape[1],
             "alpha_selected": alpha_selected,
@@ -375,6 +416,19 @@ def run_backtest(
                     "mae": float(qdf["abs_error"].mean()),
                     "count": len(qdf),
                 }
+
+    if config.compute_metrics:
+        metrics["stable_vs_final_3rd_growth"] = _compute_metrics(
+            df, pred_col="y_pred_stable", truth_col=config.stable_label_col
+        )
+        metrics["stable_vs_real_time_growth"] = _compute_metrics(
+            df, pred_col="y_pred_stable", truth_col=config.real_time_label_col
+        )
+        if config.training_label_mode == "revision":
+            df["y_true_revision"] = df[config.stable_label_col] - df[config.real_time_label_col]
+            metrics["revision_metrics"] = _compute_metrics(
+                df, pred_col="y_pred_revision", truth_col="y_true_revision"
+            )
 
     # Save to CSV if requested
     if config.output_csv is not None:
