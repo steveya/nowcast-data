@@ -536,8 +536,6 @@ class BridgeNowcaster:
             "ref_quarter": str(current_ref),
             "y_true_asof": y_true_asof,
             "y_true_final": y_true_final,
-            "y_true_stable": np.nan,
-            "y_true_real_time": np.nan,
             "y_true_stable": y_true_stable,
             "y_true_real_time": y_true_real_time,
             "y_pred": y_pred_raw,
