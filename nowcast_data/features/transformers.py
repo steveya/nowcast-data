@@ -72,9 +72,21 @@ class QuarterlyFeatureBuilder(BaseEstimator, TransformerMixin):
             )
 
         feature_blocks: list[pd.DataFrame] = []
+        predictor_set = set(self.predictor_keys)
         for _, group in X.groupby(self.group_col):
             original_index = group.index
             sorted_group = group.sort_values(self.time_col)
+            passthrough_cols = [
+                c
+                for c in sorted_group.columns
+                if c not in {self.time_col, self.group_col} and c not in predictor_set
+            ]
+            # Exclude time/group columns; they are not model features.
+            passthrough = (
+                sorted_group[passthrough_cols].copy()
+                if passthrough_cols
+                else pd.DataFrame(index=sorted_group.index)
+            )
             features = pd.DataFrame(index=sorted_group.index)
 
             for series_key in self.predictor_keys:
@@ -83,20 +95,18 @@ class QuarterlyFeatureBuilder(BaseEstimator, TransformerMixin):
                 recipe = get_recipe(series_key)
                 series = sorted_group[series_key]
 
-                if recipe.level:
-                    features[f"{series_key}__level"] = series
+                features[f"{series_key}__level"] = series
 
                 qoq, yoy = self._compute_changes(series, recipe.change)
-                if recipe.qoq:
-                    features[f"{series_key}__qoq"] = qoq
-                if recipe.yoy:
-                    features[f"{series_key}__yoy"] = yoy
+                features[f"{series_key}__qoq"] = qoq
+                features[f"{series_key}__yoy"] = yoy
                 if self.add_availability_flags:
                     features[f"{series_key}__isna"] = series.isna().astype(int)
 
+            combined = pd.concat([passthrough, features], axis=1)
             # Reindex back to original row order for this group.
-            features = features.reindex(original_index)
-            feature_blocks.append(features)
+            combined = combined.reindex(original_index)
+            feature_blocks.append(combined)
 
         if not feature_blocks:
             return pd.DataFrame(index=X.index)

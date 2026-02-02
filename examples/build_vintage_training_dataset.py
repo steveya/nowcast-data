@@ -56,6 +56,16 @@ from nowcast_data.pit.api import PITDataManager
 from nowcast_data.pit.core.catalog import SeriesCatalog
 from nowcast_data.pit.core.models import SeriesMetadata
 
+# Relative tolerance for cross-vintage 3rd-release consistency checks.
+RELATIVE_TOLERANCE = 1e-8
+# Absolute tolerance floor for consistency checks when values are near zero.
+ABSOLUTE_TOLERANCE = 1e-10
+# Max number of quarters shown in invariant violation summaries.
+MAX_VIOLATION_QUARTERS = 3
+# Max number of example rows per quarter in invariant violation summaries.
+MAX_VIOLATION_ROWS = 3
+RT_FEATURE_COLS = ["y_asof_latest_growth", "y_asof_latest_level"]
+
 
 def _compute_metrics(df: pd.DataFrame, *, pred_col: str, truth_col: str) -> dict:
     """Compute RMSE/MAE and ref-offset breakdown for prediction/truth columns."""
@@ -196,6 +206,20 @@ def _collect_meta_table(meta_csv: Path) -> pd.DataFrame:
     return df
 
 
+def _format_invariant_error(
+    *,
+    bad_quarters: list[str],
+    total_bad: int,
+    summary: pd.DataFrame,
+    examples: str,
+) -> str:
+    return (
+        "Inconsistent y_final_3rd_level across vintages for reference_quarter(s): "
+        f"{bad_quarters} (showing {len(bad_quarters)} of {total_bad}). "
+        f"Summary:\n{summary}\nExamples:\n{examples}"
+    )
+
+
 def make_pipeline(model: str, predictor_keys: list[str], alphas: list[float]) -> Pipeline:
     steps = [
         ("feat", QuarterlyFeatureBuilder(predictor_keys=predictor_keys)),
@@ -217,7 +241,7 @@ def describe_pipeline(pipe: Pipeline) -> str:
 
 
 def build_base_cols(predictor_keys: list[str]) -> list[str]:
-    return [*predictor_keys, "asof_date", "ref_quarter_end"]
+    return [*predictor_keys, *RT_FEATURE_COLS, "asof_date", "ref_quarter_end"]
 
 
 def build_model_matrices(
@@ -472,19 +496,62 @@ def main() -> None:
         return group
 
     panel = panel.groupby("asof_date", group_keys=False).apply(_add_asof_latest_growth)
-    # Median aggregation smooths across vintages; ref_quarter_end is derived deterministically
-    # from ref_quarter.
-    stable = (
-        panel[["ref_quarter", "y_final_3rd_level"]]
-        .dropna(subset=["y_final_3rd_level"])
-        .groupby("ref_quarter", as_index=False)["y_final_3rd_level"]
-        .median()
+    third_release_data = panel[["ref_quarter", "asof_date", "y_final_3rd_level"]].dropna(
+        subset=["y_final_3rd_level"]
     )
-    stable["ref_quarter_end"] = stable["ref_quarter"].map(_quarter_end_for_ref)
-    stable = stable.sort_values("ref_quarter_end")
-    stable["y_final_3rd_growth"] = compute_gdp_qoq_saar(stable["y_final_3rd_level"])
+    if third_release_data.empty:
+        truth = pd.DataFrame(
+            columns=[
+                "ref_quarter",
+                "first_release_asof_date",
+                "y_final_3rd_level",
+                "ref_quarter_end",
+                "y_final_3rd_growth",
+            ]
+        )
+    else:
+        grouped_stats = third_release_data.groupby("ref_quarter")["y_final_3rd_level"].agg(
+            min_value="min",
+            max_value="max",
+        )
+        spread = grouped_stats["max_value"] - grouped_stats["min_value"]
+        scale = grouped_stats[["min_value", "max_value"]].abs().max(axis=1)
+        # Combined relative + absolute tolerance; absolute term handles near-zero levels.
+        tolerance = RELATIVE_TOLERANCE * scale + ABSOLUTE_TOLERANCE
+        inconsistent_quarters = spread > tolerance
+        if inconsistent_quarters.any():
+            inconsistent_quarters_all = inconsistent_quarters.index[inconsistent_quarters].tolist()
+            inconsistent_quarters_sample = inconsistent_quarters_all[:MAX_VIOLATION_QUARTERS]
+            bad_rows = third_release_data[
+                third_release_data["ref_quarter"].isin(inconsistent_quarters_sample)
+            ]
+            summary = grouped_stats.loc[inconsistent_quarters_sample].copy()
+            summary["spread"] = summary["max_value"] - summary["min_value"]
+            examples = (
+                bad_rows
+                .sort_values(["ref_quarter", "asof_date"])
+                .groupby("ref_quarter")
+                .head(MAX_VIOLATION_ROWS)
+                .to_string(index=False)
+            )
+            raise ValueError(
+                _format_invariant_error(
+                    bad_quarters=inconsistent_quarters_sample,
+                    total_bad=len(inconsistent_quarters_all),
+                    summary=summary,
+                    examples=examples,
+                )
+            )
+
+        sorted_observations = third_release_data.sort_values(
+            ["ref_quarter", "asof_date"]
+        ).rename(columns={"asof_date": "first_release_asof_date"})
+        truth = sorted_observations.groupby("ref_quarter", as_index=False).first()
+        truth["ref_quarter_end"] = truth["ref_quarter"].map(_quarter_end_for_ref)
+        truth = truth.sort_values("ref_quarter_end")
+        truth["y_final_3rd_growth"] = compute_gdp_qoq_saar(truth["y_final_3rd_level"])
     panel = panel.merge(
-        stable[["ref_quarter", "y_final_3rd_growth"]],
+        truth[["ref_quarter", "y_final_3rd_growth"]],
         on="ref_quarter",
         how="left",
         validate="m:1",
@@ -512,12 +579,16 @@ def main() -> None:
             else:
                 n_raw_predictors_present_train = 0
 
-            test_row = panel[
+            test_rows = panel[
                 (panel["asof_date"] == asof_date) & (panel["ref_offset"] == ref_offset)
             ]
-            if test_row.empty:
-                continue
-            test_row = test_row.iloc[0]
+            if len(test_rows) != 1:
+                raise ValueError(
+                    "Expected exactly one test row for "
+                    f"asof_date={asof_date!r} ref_offset={ref_offset!r}; "
+                    f"found {len(test_rows)}. Check panel rows for this asof_date/offset."
+                )
+            test_row = test_rows.iloc[0]
 
             X_train, X_test, base_cols = build_model_matrices(
                 history_offset=history_offset,
@@ -530,6 +601,16 @@ def main() -> None:
                     f"(train={len(X_train.index)} history={len(history_offset.index)})"
                 )
             y_train = history_offset.loc[X_train.index, "y_final_3rd_growth"]
+            if not X_train.index.equals(y_train.index):
+                train_indices_missing_labels = list(X_train.index.difference(y_train.index)[:5])
+                label_indices_missing_features = list(y_train.index.difference(X_train.index)[:5])
+                raise ValueError(
+                    "X_train index mismatch with y_train "
+                    f"(train={len(X_train.index)} y_train={len(y_train.index)}). "
+                    "Check for filtering or alignment issues in history_offset. "
+                    f"train_indices_missing_labels[:5]={train_indices_missing_labels} "
+                    f"label_indices_missing_features[:5]={label_indices_missing_features}"
+                )
 
             # Pipeline structure is fully determined by model choice, alphas, and predictor list.
             pipe_key = (
@@ -621,8 +702,11 @@ def main() -> None:
         "feature_pipeline": describe_pipeline(pipeline_for_metadata),
         "recipe_registry_version": "recipes_v1",
         "level_anchor_policy": "real_time_only",
-        "stable_truth_policy": "median_across_vintages",
+        "stable_truth_policy": "third_release_first_observed",
         "stable_truth_release": "nth_release_3",
+        "stable_truth_first_observed_asof_col": "first_release_asof_date",
+        "real_time_feature_cols": RT_FEATURE_COLS,
+        "uses_real_time_as_feature": True,
         "n_raw_predictors_expected": int(len(predictor_keys)),
         "feature_schema": {
             "base_cols": metadata_base_cols,
