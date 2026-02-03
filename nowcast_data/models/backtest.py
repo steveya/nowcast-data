@@ -91,7 +91,6 @@ class BacktestConfig:
         rolling_window: If set, use rolling window of this size; else expanding window.
         standardize: Whether to standardize features.
         max_nan_fraction: Drop features with more than this fraction NaNs.
-        include_y_asof_latest_as_feature: Include y_asof_latest as a feature with indicator.
         output_csv: Optional path to save results CSV.
         compute_metrics: Whether to compute summary metrics.
         ingest_from_ctx_source: Allow ingestion from context source.
@@ -112,8 +111,6 @@ class BacktestConfig:
     rolling_window: int | None = None
     standardize: bool = True
     max_nan_fraction: float = 0.5
-    # Deprecated: use use_real_time_target_as_feature + real_time_feature_cols instead.
-    include_y_asof_latest_as_feature: bool = False
     use_real_time_target_as_feature: bool = True
     real_time_feature_cols: list[str] = field(
         default_factory=lambda: ["y_asof_latest_growth", "y_asof_latest_level"]
@@ -211,16 +208,13 @@ def run_backtest(
         config=vintage_config,
         vintages=vintages,
         ingest_from_ctx_source=config.ingest_from_ctx_source,
-        include_y_asof_latest_as_feature=config.include_y_asof_latest_as_feature,
     )
 
     if xy_panel.empty:
         return pd.DataFrame(), {"rmse": np.nan, "mae": np.nan, "count": 0}
 
     # Get feature columns
-    feature_cols = get_feature_columns(
-        xy_panel, include_y_asof_latest_as_feature=config.include_y_asof_latest_as_feature
-    )
+    feature_cols = get_feature_columns(xy_panel)
 
     if not config.use_real_time_target_as_feature and config.real_time_feature_cols:
         feature_cols = [col for col in feature_cols if col not in config.real_time_feature_cols]
@@ -230,21 +224,6 @@ def run_backtest(
 
     # Determine label column
     label_col = config.label  # "y_asof_latest" or "y_final"
-
-    if config.include_y_asof_latest_as_feature:
-        import warnings
-
-        warnings.warn(
-            "include_y_asof_latest_as_feature is deprecated; "
-            "use use_real_time_target_as_feature/real_time_feature_cols instead.",
-            DeprecationWarning,
-        )
-        if not config.real_time_feature_cols:
-            config.real_time_feature_cols = [
-                "y_asof_latest_growth",
-                "y_asof_latest_level",
-            ]
-        config.use_real_time_target_as_feature = True
 
     # Walk-forward backtest
     results = []
@@ -321,7 +300,6 @@ def run_backtest(
             label_col=label_col,
             max_nan_fraction=config.max_nan_fraction,
             standardize=config.standardize,
-            include_y_asof_latest_as_feature=config.include_y_asof_latest_as_feature,
         )
 
         if config.training_label_mode == "revision":

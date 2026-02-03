@@ -45,8 +45,6 @@ class BridgeConfig:
     final_target_policy: TargetPolicy = field(
         default_factory=lambda: TargetPolicy(mode="latest_available", max_release_rank=3)
     )
-    # Deprecated: use use_real_time_target_as_feature + real_time_feature_cols instead.
-    include_y_asof_latest_as_feature: bool = False
     use_real_time_target_as_feature: bool = True
     real_time_feature_cols: list[str] = field(
         default_factory=lambda: ["y_asof_latest_growth", "y_asof_latest_level"]
@@ -292,21 +290,6 @@ class BridgeNowcaster:
 
         if self.config.training_label_mode == "revision" and self.config.label != "y_final":
             raise ValueError("training_label_mode='revision' requires config.label='y_final'")
-
-        if self.config.include_y_asof_latest_as_feature:
-            import warnings
-
-            warnings.warn(
-                "include_y_asof_latest_as_feature is deprecated; "
-                "use use_real_time_target_as_feature/real_time_feature_cols instead.",
-                DeprecationWarning,
-            )
-            if not self.config.real_time_feature_cols:
-                self.config.real_time_feature_cols = [
-                    "y_asof_latest_growth",
-                    "y_asof_latest_level",
-                ]
-            self.config.use_real_time_target_as_feature = True
 
         if self.config.label == "y_asof_latest":
             # Online label: use build_rt_quarterly_dataset with latest values

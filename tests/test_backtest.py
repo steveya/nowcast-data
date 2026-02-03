@@ -97,7 +97,6 @@ class TestBacktestConfig:
         assert config.output_csv is None
         assert config.train_min_periods == 40  # Default is 40 vintages
         assert config.rolling_window is None
-        assert config.include_y_asof_latest_as_feature is False
 
 
 class TestRunBacktest:
@@ -319,33 +318,12 @@ class TestPanelFunctions:
             }
         )
 
-        cols = get_feature_columns(df, include_y_asof_latest_as_feature=False)
+        cols = get_feature_columns(df)
         assert "feature1" in cols
         assert "feature2" in cols
         assert "y_asof_latest" not in cols
         assert "y_final" not in cols
         assert "ref_quarter" not in cols
-
-    def test_get_feature_columns_with_y_asof_feature(self) -> None:
-        """Test get_feature_columns with y_asof_latest as feature."""
-        from nowcast_data.models.panel import get_feature_columns
-
-        df = pd.DataFrame(
-            {
-                "feature1": [1, 2, 3],
-                "y_asof_latest_is_known": [1.0, 0.0, 1.0],
-                "y_asof_latest_feature": [7, 0, 9],
-                "y_asof_latest": [7, 8, 9],
-                "y_final": [10, 11, 12],
-            }
-        )
-
-        cols = get_feature_columns(df, include_y_asof_latest_as_feature=True)
-        assert "feature1" in cols
-        assert "y_asof_latest_is_known" in cols
-        assert "y_asof_latest_feature" in cols
-        assert "y_asof_latest" not in cols  # Raw column excluded
-        assert "y_final" not in cols
 
     def test_preprocess_panel_imputation(self) -> None:
         """Test preprocess_panel_for_training imputes missing values."""
@@ -372,7 +350,6 @@ class TestPanelFunctions:
             label_col="y_asof_latest",
             max_nan_fraction=0.5,
             standardize=False,
-            include_y_asof_latest_as_feature=False,
         )
 
         # Check no NaN in imputed training data
@@ -400,7 +377,6 @@ class TestPanelFunctions:
             feature_cols=["feature1"],
             label_col="y_asof_latest",
             standardize=True,
-            include_y_asof_latest_as_feature=False,
         )
 
         # Check standardization
