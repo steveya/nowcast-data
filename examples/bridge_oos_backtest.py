@@ -162,7 +162,6 @@ def build_vintage_panel_with_release_meta(
     pit: PITDataManager,
     asof_dates: list[date],
     config: VintageTrainingDatasetConfig,
-    include_y_asof_latest_as_feature: bool,
 ) -> pd.DataFrame:
     """Build a panel (index=asof_date) and keep target release metadata."""
 
@@ -189,13 +188,6 @@ def build_vintage_panel_with_release_meta(
         row["asof_date"] = asof
         row["ref_quarter"] = str(current_ref)
         row["month_in_quarter"] = _month_in_quarter(asof)
-
-        # Optional: add y_asof_latest as an explicit feature with indicator
-        if include_y_asof_latest_as_feature:
-            y_asof_val = row.get("y_asof_latest", np.nan)
-            is_known = not pd.isna(y_asof_val)
-            row["y_asof_latest_is_known"] = 1.0 if is_known else 0.0
-            row["y_asof_latest_feature"] = float(y_asof_val) if is_known else 0.0
 
         # Pull release meta for the current quarter
         rel_meta = meta.get("target_release_meta", {}).get(str(current_ref), {})
@@ -483,7 +475,6 @@ def main() -> None:
         pit=pit,
         asof_dates=vintages,
         config=ds_config,
-        include_y_asof_latest_as_feature=args.include_y_asof_latest_as_feature,
     )
     if panel.empty:
         raise RuntimeError(
@@ -506,9 +497,6 @@ def main() -> None:
         "y_final_selected_asof_utc",
         "y_final_policy_mode",
     }
-    if not args.include_y_asof_latest_as_feature:
-        feature_exclude.update({"y_asof_latest_is_known", "y_asof_latest_feature"})
-
     preds = walk_forward_fit_predict(
         panel,
         label_col=label_col,
@@ -544,7 +532,6 @@ def main() -> None:
             "evaluation_asof_date": str(evaluation_asof_date),
             "final_target_policy": asdict(final_target_policy),
             "include_target_release_features": bool(args.include_target_release_features),
-            "include_y_asof_latest_as_feature": bool(args.include_y_asof_latest_as_feature),
             "model": args.model,
             "alphas": alphas,
             "min_train_periods": int(args.min_train_periods),

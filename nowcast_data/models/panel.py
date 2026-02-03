@@ -29,7 +29,6 @@ def build_vintage_panel_dataset(
     vintages: Iterable[date],
     *,
     ingest_from_ctx_source: bool = False,
-    include_y_asof_latest_as_feature: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build a panel dataset indexed by vintage date for walk-forward backtesting.
 
@@ -45,12 +44,6 @@ def build_vintage_panel_dataset(
             typically be [0] to get only the current quarter's row per vintage.
         vintages: Iterable of vintage dates to process.
         ingest_from_ctx_source: Whether to allow ingestion from context sources.
-        include_y_asof_latest_as_feature: If True, include y_asof_latest as a feature
-            column (y_asof_latest_feature) with explicit handling of missing values:
-            - Adds y_asof_latest_is_known indicator (1.0 if known, 0.0 if null)
-            - Sets y_asof_latest_feature to 0.0 when unknown (NOT mean-imputed)
-            This prevents silent data leakage from mean imputation.
-
     Returns:
         Tuple of (Xy_panel, meta_panel):
 
@@ -58,8 +51,6 @@ def build_vintage_panel_dataset(
             - ref_quarter: Reference quarter for this vintage
             - Predictor feature columns
             - Expanded daily feature columns (e.g., "DAILY_FCI.last")
-            - y_asof_latest_feature (if include_y_asof_latest_as_feature=True)
-            - y_asof_latest_is_known (if include_y_asof_latest_as_feature=True)
             - y_asof_latest: Latest target value known at vintage
             - y_final: Final target value (from evaluation_asof_date)
 
@@ -73,8 +64,7 @@ def build_vintage_panel_dataset(
 
     Note:
         Features NEVER include y_final to prevent leakage. The y_asof_latest column
-        is only included as a feature if explicitly requested, with proper indicator
-        handling to avoid silent mean imputation.
+        remains a label-only column and is not used as a model feature.
     """
     vintages = sorted(set(vintages))
     if not vintages:
@@ -115,14 +105,6 @@ def build_vintage_panel_dataset(
         row["asof_date"] = vintage_date
         row["ref_quarter"] = str(current_quarter)
 
-        # Handle y_asof_latest as feature with explicit indicator
-        if include_y_asof_latest_as_feature:
-            y_asof_val = row.get("y_asof_latest", np.nan)
-            is_known = not (pd.isna(y_asof_val))
-            row["y_asof_latest_is_known"] = 1.0 if is_known else 0.0
-            # Use 0.0 when unknown, NOT mean-imputed - explicit zero imputation
-            row["y_asof_latest_feature"] = float(y_asof_val) if is_known else 0.0
-
         xy_rows.append(row)
 
         # Build meta row
@@ -153,19 +135,14 @@ def build_vintage_panel_dataset(
     # Ensure column alignment: union of all columns, stable order
     # Move label columns to the end for clarity
     label_cols = ["y_asof_latest", "y_final"]
-    indicator_cols = ["y_asof_latest_is_known", "y_asof_latest_feature"]
     meta_cols = ["ref_quarter"]
 
-    feature_cols = [
-        col for col in xy_panel.columns if col not in label_cols + indicator_cols + meta_cols
-    ]
+    feature_cols = [col for col in xy_panel.columns if col not in label_cols + meta_cols]
     feature_cols = sorted(feature_cols)
 
     # Order: meta_cols, feature_cols, indicator_cols (if present), label_cols
     final_col_order = meta_cols.copy()
     final_col_order.extend(feature_cols)
-    if include_y_asof_latest_as_feature:
-        final_col_order.extend([c for c in indicator_cols if c in xy_panel.columns])
     final_col_order.extend([c for c in label_cols if c in xy_panel.columns])
 
     xy_panel = xy_panel[[c for c in final_col_order if c in xy_panel.columns]]
@@ -173,24 +150,15 @@ def build_vintage_panel_dataset(
     return xy_panel, meta_panel
 
 
-def get_feature_columns(
-    xy_panel: pd.DataFrame,
-    include_y_asof_latest_as_feature: bool = False,
-) -> list[str]:
+def get_feature_columns(xy_panel: pd.DataFrame) -> list[str]:
     """Extract feature column names from a vintage panel dataset.
 
     Args:
         xy_panel: Panel dataset from build_vintage_panel_dataset.
-        include_y_asof_latest_as_feature: Whether y_asof_latest_feature should be
-            included in features (must match what was used to build the panel).
-
     Returns:
         List of feature column names (excludes labels and metadata columns).
     """
     exclude_cols = {"ref_quarter", "y_asof_latest", "y_final"}
-    if not include_y_asof_latest_as_feature:
-        exclude_cols.update({"y_asof_latest_feature", "y_asof_latest_is_known"})
-
     return [col for col in xy_panel.columns if col not in exclude_cols]
 
 
@@ -203,14 +171,12 @@ def preprocess_panel_for_training(
     label_col: str,
     max_nan_fraction: float = 0.5,
     standardize: bool = True,
-    include_y_asof_latest_as_feature: bool = False,
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series | None, dict]:
     """Preprocess panel data for walk-forward training.
 
     This function:
     1. Drops features with too many NaNs in the training set
-    2. Imputes remaining NaNs using training set means (except y_asof_latest_feature
-       which uses explicit zero-imputation via the indicator pattern)
+    2. Imputes remaining NaNs using training set means
     3. Optionally standardizes features using training set statistics
 
     Args:
@@ -221,8 +187,6 @@ def preprocess_panel_for_training(
         label_col: Target column name ("y_asof_latest" or "y_final").
         max_nan_fraction: Drop features with more than this fraction NaNs in training.
         standardize: Whether to standardize features.
-        include_y_asof_latest_as_feature: Whether y_asof_latest_feature is included.
-
     Returns:
         Tuple of (train_X, train_y, test_X, test_y, stats):
         - train_X: Preprocessed training features
@@ -255,13 +219,11 @@ def preprocess_panel_for_training(
 
     train_X = train_X[keep_cols]
 
-    # Compute training means for imputation (exclude special y_asof_latest_feature)
-    # y_asof_latest_feature already has explicit 0.0 imputation via indicator pattern
-    impute_cols = [c for c in keep_cols if c != "y_asof_latest_feature"]
-    means = train_X[impute_cols].mean()
+    # Compute training means for imputation
+    means = train_X.mean()
 
     # Impute training set
-    train_X[impute_cols] = train_X[impute_cols].fillna(means)
+    train_X = train_X.fillna(means)
 
     # Standardization
     if standardize and not train_X.empty:
@@ -280,7 +242,7 @@ def preprocess_panel_for_training(
     # Process test data
     if test_data is not None:
         test_X = test_data[keep_cols].copy()
-        test_X[impute_cols] = test_X[impute_cols].fillna(means)
+        test_X = test_X.fillna(means)
         if standardize and not test_X.empty:
             test_X = (
                 test_X - pd.Series(stats["means"]).reindex(test_X.columns).fillna(0)

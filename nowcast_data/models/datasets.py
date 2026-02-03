@@ -7,6 +7,8 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
+from nowcast_data.features import compute_gdp_qoq_saar
+from nowcast_data.models.target_policy import quarter_end_date
 from nowcast_data.models.utils import (
     agg_series,
     apply_quarter_cutoff,
@@ -278,6 +280,18 @@ def build_vintage_training_dataset(
 
     dataset["y_asof_latest"] = pd.Series(y_asof_values, index=desired_index, dtype="float64")
     dataset["y_final"] = pd.Series(y_final_values, index=desired_index, dtype="float64")
+    ref_quarter_end = desired_index.map(lambda quarter: quarter_end_date(str(quarter)))
+    dataset["ref_quarter_end"] = pd.to_datetime(ref_quarter_end)
+    dataset["asof_date"] = pd.to_datetime(asof_date)
+    dataset["y_asof_latest_level"] = dataset["y_asof_latest"]
+    # Stable target naming: y_stable_* denotes the final/stable value proxy.
+    # Historical y_final_3rd_* naming is retained as an alias for backward compatibility
+    # and may not literally imply a third release unless the adapter guarantees it.
+    dataset["y_stable_level"] = dataset["y_final"]
+    dataset["y_asof_latest_growth"] = compute_gdp_qoq_saar(dataset["y_asof_latest_level"])
+    dataset["y_stable_growth"] = compute_gdp_qoq_saar(dataset["y_stable_level"])
+    dataset["y_final_3rd_level"] = dataset["y_stable_level"]
+    dataset["y_final_3rd_growth"] = dataset["y_stable_growth"]
     dataset.index.name = "ref_quarter"
 
     meta = {
@@ -285,5 +299,8 @@ def build_vintage_training_dataset(
         "nobs_current": nobs_current,
         "last_obs_date_current_quarter": last_obs_date_current_quarter,
         "target_release_meta": target_meta_by_ref,
+        "stable_label": "y_stable_growth",
+        "revision_label": "y_revision = y_stable_growth - y_asof_latest_growth",
+        "stable_pred_reconstruction": "y_pred_stable = y_true_real_time + y_pred_revision",
     }
     return dataset, meta

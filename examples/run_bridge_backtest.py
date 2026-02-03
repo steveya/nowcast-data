@@ -43,7 +43,6 @@ def main() -> None:
         label="y_asof_latest",  # Online learning mode
         train_min_periods=4,  # Require at least 4 training vintages
         rolling_window=None,  # Expanding window (use all history)
-        include_y_asof_latest_as_feature=False,
         compute_metrics=True,
         output_csv=None,  # Set to a path to save results
     )
@@ -81,7 +80,7 @@ def main() -> None:
         final_target_policy=TargetPolicy(mode="latest_available", max_release_rank=3),
         train_min_periods=4,
         rolling_window=None,
-        include_y_asof_latest_as_feature=True,  # Use real-time target as feature
+        use_real_time_target_as_feature=True,
         compute_metrics=True,
     )
 
@@ -90,7 +89,7 @@ def main() -> None:
     print(f"Period: {config_offline.start_date} to {config_offline.end_date}")
     print(f"Label: {config_offline.label}")
     print(f"Evaluation date: {config_offline.evaluation_asof_date}")
-    print(f"Include y_asof_latest as feature: {config_offline.include_y_asof_latest_as_feature}")
+    print(f"Use real-time target as feature: {config_offline.use_real_time_target_as_feature}")
 
     print("\nRunning backtest...")
     df_offline, metrics_offline = run_backtest(
