@@ -80,6 +80,8 @@ def test_build_vintage_training_dataset_with_target_features(pit_context) -> Non
     assert q2 in dataset.index
     assert dataset.loc[q1, "y_asof_latest"] == 1.0
     assert dataset.loc[q1, "y_final"] == 1.2
+    assert dataset.loc[q1, "y_stable_level"] == dataset.loc[q1, "y_final_3rd_level"]
+    assert dataset.loc[q1, "y_stable_growth"] == dataset.loc[q1, "y_final_3rd_growth"]
     assert dataset.loc[q1, "GDPC1.rel1"] == 1.0
     assert np.isnan(dataset.loc[q1, "GDPC1.rel2"])
     assert dataset.loc[q1, "GDPC1.latest"] == 1.0

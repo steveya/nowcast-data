@@ -112,13 +112,16 @@ class BacktestConfig:
     rolling_window: int | None = None
     standardize: bool = True
     max_nan_fraction: float = 0.5
+    # Deprecated: use use_real_time_target_as_feature + real_time_feature_cols instead.
     include_y_asof_latest_as_feature: bool = False
     use_real_time_target_as_feature: bool = True
     real_time_feature_cols: list[str] = field(
         default_factory=lambda: ["y_asof_latest_growth", "y_asof_latest_level"]
     )
+    # training_label_mode="revision" uses y_revision = y_stable_growth - y_real_time_growth.
+    # Stable predictions are reconstructed as y_pred_stable = y_true_real_time + y_pred_revision.
     training_label_mode: Literal["stable", "revision"] = "stable"
-    stable_label_col: str = "y_final_3rd_growth"
+    stable_label_col: str = "y_stable_growth"
     real_time_label_col: str = "y_asof_latest_growth"
     output_csv: str | None = None
     compute_metrics: bool = True
@@ -228,6 +231,21 @@ def run_backtest(
     # Determine label column
     label_col = config.label  # "y_asof_latest" or "y_final"
 
+    if config.include_y_asof_latest_as_feature:
+        import warnings
+
+        warnings.warn(
+            "include_y_asof_latest_as_feature is deprecated; "
+            "use use_real_time_target_as_feature/real_time_feature_cols instead.",
+            DeprecationWarning,
+        )
+        if not config.real_time_feature_cols:
+            config.real_time_feature_cols = [
+                "y_asof_latest_growth",
+                "y_asof_latest_level",
+            ]
+        config.use_real_time_target_as_feature = True
+
     # Walk-forward backtest
     results = []
     panel_vintages = sorted(xy_panel.index.tolist())
@@ -282,6 +300,11 @@ def run_backtest(
                     else np.nan
                 ),
                 "label_used": label_col,
+                "stable_pred_reconstruction": (
+                    "real_time_plus_revision"
+                    if config.training_label_mode == "revision"
+                    else "direct"
+                ),
                 "n_train": len(train_vintages),
                 "n_features": 0,
                 "alpha_selected": np.nan,
@@ -302,8 +325,13 @@ def run_backtest(
         )
 
         if config.training_label_mode == "revision":
+            stable_col = (
+                config.stable_label_col
+                if config.stable_label_col in xy_panel.columns
+                else "y_final_3rd_growth"
+            )
             train_y = (
-                xy_panel.loc[train_vintages, config.stable_label_col]
+                xy_panel.loc[train_vintages, stable_col]
                 - xy_panel.loc[train_vintages, config.real_time_label_col]
             )
 
@@ -344,6 +372,11 @@ def run_backtest(
                     else np.nan
                 ),
                 "label_used": label_col,
+                "stable_pred_reconstruction": (
+                    "real_time_plus_revision"
+                    if config.training_label_mode == "revision"
+                    else "direct"
+                ),
                 "n_train": len(train_y_clean),
                 "n_features": train_X_clean.shape[1] if not train_X_clean.empty else 0,
                 "alpha_selected": np.nan,
@@ -411,6 +444,11 @@ def run_backtest(
                 else np.nan
             ),
             "label_used": label_col,
+            "stable_pred_reconstruction": (
+                "real_time_plus_revision"
+                if config.training_label_mode == "revision"
+                else "direct"
+            ),
             "training_label_mode": config.training_label_mode,
             "n_train": len(train_y_clean),
             "n_features": train_X_clean.shape[1],
@@ -426,6 +464,14 @@ def run_backtest(
     for col in ["y_pred_stable", "y_pred_revision", "y_true_stable", "y_true_real_time"]:
         if col not in df.columns:
             df[col] = np.nan
+
+    if "stable_pred_reconstruction" not in df.columns:
+        df["stable_pred_reconstruction"] = np.nan
+
+    stable_col = config.stable_label_col
+    if stable_col not in df.columns and "y_final_3rd_growth" in df.columns:
+        stable_col = "y_final_3rd_growth"
+        df["y_true_stable"] = df[stable_col]
 
     # Add y_true and error columns based on label_used
     df["y_true"] = (

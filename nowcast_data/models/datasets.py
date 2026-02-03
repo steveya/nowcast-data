@@ -284,9 +284,14 @@ def build_vintage_training_dataset(
     dataset["ref_quarter_end"] = pd.to_datetime(ref_quarter_end)
     dataset["asof_date"] = pd.to_datetime(asof_date)
     dataset["y_asof_latest_level"] = dataset["y_asof_latest"]
-    dataset["y_final_3rd_level"] = dataset["y_final"]
+    # Stable target naming: y_stable_* denotes the final/stable value proxy.
+    # Historical y_final_3rd_* naming is retained as an alias for backward compatibility
+    # and may not literally imply a third release unless the adapter guarantees it.
+    dataset["y_stable_level"] = dataset["y_final"]
     dataset["y_asof_latest_growth"] = compute_gdp_qoq_saar(dataset["y_asof_latest_level"])
-    dataset["y_final_3rd_growth"] = compute_gdp_qoq_saar(dataset["y_final_3rd_level"])
+    dataset["y_stable_growth"] = compute_gdp_qoq_saar(dataset["y_stable_level"])
+    dataset["y_final_3rd_level"] = dataset["y_stable_level"]
+    dataset["y_final_3rd_growth"] = dataset["y_stable_growth"]
     dataset.index.name = "ref_quarter"
 
     meta = {
@@ -294,5 +299,8 @@ def build_vintage_training_dataset(
         "nobs_current": nobs_current,
         "last_obs_date_current_quarter": last_obs_date_current_quarter,
         "target_release_meta": target_meta_by_ref,
+        "stable_label": "y_stable_growth",
+        "revision_label": "y_revision = y_stable_growth - y_asof_latest_growth",
+        "stable_pred_reconstruction": "y_pred_stable = y_true_real_time + y_pred_revision",
     }
     return dataset, meta
